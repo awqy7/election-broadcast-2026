@@ -36,17 +36,12 @@ estiver transmitindo.
 2. ABRIR O PROGRAMA
 ----------------------------------------------------------------
 
-Execute INSTALAR.bat uma unica vez, na primeira utilizacao.
-
-Depois, todo dia, use INICIAR.bat. Ele traz um menu:
-
-  ENSAIO     dados de teste do TSE, com aviso SIMULACAO na tela.
-             Serve para treinar sem risco. Use esta para aprender.
-
-  OFICIAL    dados verdadeiros do TSE, sem aviso de simulacao.
-             Use somente para transmitir.
-
-  DIAGNOSTICO  testa se o programa esta respondendo.
+Use o atalho Election Broadcast 2026 ou INICIAR.bat.
+Ele configura a primeira abertura e inicia diretamente no modo OFICIAL.
+Nao ha menu de escolha e nao inicia dados de teste automaticamente.
+Se houver falha, a janela permanece aberta. O log fica em data/startup.log.
+Se o servidor oficial ja estiver rodando, o atalho apenas abre as abas.
+INICIAR-SIMULADO.bat continua separado para ensaio solicitado pelo operador.
 
 O programa abre uma janela preta e depois abre as duas abas
 automaticamente.

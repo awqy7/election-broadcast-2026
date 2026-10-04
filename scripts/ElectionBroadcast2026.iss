@@ -18,7 +18,7 @@
 ; ---------------------------------------------------------------------------
 
 #define AppName "Election Broadcast 2026"
-#define AppVersion "1.0.0"
+#define AppVersion "1.0.1"
 #define AppPublisher "Election Broadcast 2026"
 #define AppExeName "ElectionBroadcast2026"
 
@@ -80,19 +80,13 @@ Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs c
 ; de 3814 arquivos sobram 17, todos de dados do operador.
 
 [Icons]
-Name: "{group}\Election Broadcast 2026"; Filename: "{app}\INICIAR.bat"; \
-    WorkingDir: "{app}"; Comment: "Menu para escolher ENSAIO ou OFICIAL"
+Name: "{group}\Election Broadcast 2026"; Filename: "{cmd}"; Parameters: "/D /K ""{app}\INICIAR.bat"""; WorkingDir: "{app}"; Comment: "Iniciar servidor e Studio OFICIAL"
 Name: "{group}\Manual do operador"; Filename: "{app}\MANUAL-OPERADOR.txt"
 Name: "{group}\Desinstalar"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\Election Broadcast 2026"; Filename: "{app}\INICIAR.bat"; \
-    WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\Election Broadcast 2026"; Filename: "{cmd}"; Parameters: "/D /K ""{app}\INICIAR.bat"""; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-; Roda a configuracao depois de instalar: testa o driver do banco, cria o .env
-; com a chave de acesso, desliga a suspensao e mostra o endereco do painel.
-; nowait: a janela do instalador fecha e o operador ve o resultado dela.
-Filename: "{app}\INSTALAR.bat"; Description: "Configurar o programa agora"; \
-    Flags: nowait postinstall skipifsilent
+Filename: "{cmd}"; Parameters: "/D /K ""{app}\INICIAR.bat"""; WorkingDir: "{app}"; Description: "Iniciar Election Broadcast em modo OFICIAL"; Flags: nowait postinstall skipifsilent
 
 [Code]
 // Se o .exe foi aberto de dentro de um ZIP ou de uma pasta sincronizada por

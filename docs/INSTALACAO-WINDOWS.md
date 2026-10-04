@@ -35,21 +35,21 @@ programa. É ela que libera o painel.
 
 Anote em papel. O arquivo também está lá se precisar de novo.
 
-## Passo 3: escolher o modo
+## Passo 3: iniciar o oficial
 
-Use `INICIAR.bat`. Ele traz um menu:
+Use o atalho **Election Broadcast 2026** ou `INICIAR.bat`. Na versão 1.0.1,
+a configuração inicial acontece automaticamente e o servidor inicia em
+**OFICIAL**, sem menu e sem abrir o simulado. O Studio só abre depois que
+`/health` confirmar o ambiente oficial. Se já estiver ativo, a instância é
+reutilizada. Uma configuração antiga `DATA_MODE=mock` ou `tse-sim` não altera
+o modo deste atalho.
 
-| Opção               | Quando usar                                                |
-| ------------------- | ---------------------------------------------------------- |
-| **1 — ENSAIO**      | Treinar. Dados de teste do TSE, aviso `SIMULACAO` na tela. |
-| **2 — OFICIAL**     | Transmitir. Dados verdadeiros do TSE, sem aviso.           |
-| **3 — DIAGNÓSTICO** | Quando algo não está funcionando.                          |
+Mantenha a janela aberta. Em caso de falha, leia a mensagem e envie
+`data/startup.log` ao suporte. O iniciador faz no máximo três tentativas e
+mantém o terminal aberto. Um IP antigo indisponível utiliza localhost;
+para restaurar acesso LAN, ajuste `HOST` no `.env`.
 
-O menu **não** sobe o servidor: ele apenas abre o painel se o programa já
-estiver rodando. Quem sobe é `INICIAR-OFICIAL.bat` ou `INICIAR-SIMULADO.bat`,
-que abrem a janela preta do servidor e depois abrem as duas abas.
-
-Janela preta aberta = no ar. Fechar = fora do ar.
+O ensaio só é iniciado explicitamente por `INICIAR-SIMULADO.bat`.
 
 ## Passo 4: as duas abas
 

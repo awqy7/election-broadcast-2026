@@ -1,3 +1,5 @@
+> Instalador Windows 1.0.1: o atalho principal inicia diretamente o **OFICIAL**. A primeira abertura configura o sistema; falhas ficam em `data/startup.log` e a janela permanece aberta. O simulado exige abertura explícita pelo atalho separado.
+
 # Election Broadcast 2026
 
 ## Baixar o instalador para Windows

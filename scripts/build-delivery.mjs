@@ -210,6 +210,7 @@ for (const name of [
 ])
   cpSync(join(root, name), join(payload, name));
 for (const name of [
+  "launch-official.mjs",
   "setup.mjs",
   "setup-core.mjs",
   "env-url.mjs",
@@ -381,7 +382,7 @@ for (const name of [
 // servidor que ainda nao existe, atrasaria a partida e abriria as abas com
 // "nao foi possivel acessar o site". O certo e disparar o auxiliar em
 // paralelo. Esta checagem garante que a ordem nao se inverta.
-for (const name of ["INICIAR-OFICIAL.bat", "INICIAR-SIMULADO.bat"]) {
+for (const name of ["INICIAR-SIMULADO.bat"]) {
   const bat = readFileSync(join(root, name), "utf8");
   const auxiliar = bat.search(/abrir-abas\.mjs/i);
   const servidor = bat.search(/dist\\server\\main\.js/i);
@@ -476,6 +477,20 @@ for (const name of [
       "INSTALAR.bat abre abas alem do .bat do modo; o operador receberia quatro abas.",
     );
 }
+
+// O atalho oficial deve iniciar o servidor, nunca apenas consultar um menu.
+if (
+  !readFileSync(join(payload, "INICIAR.bat"), "utf8").includes(
+    "INICIAR-OFICIAL.bat",
+  )
+)
+  problems.push("Atalho principal nao inicia o oficial.");
+if (
+  !readFileSync(join(payload, "INICIAR-OFICIAL.bat"), "utf8").includes(
+    "launch-official.mjs",
+  )
+)
+  problems.push("Launcher oficial ausente.");
 
 // O .iss so pode ser conferido de verdade no Windows. Mas os caminhos que ele
 // aponta nao dependem do Windows, e um erro aqui só apareceria na hora de
