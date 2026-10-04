@@ -1,3 +1,4 @@
+import { browserCheckHtml } from "../../packages/broadcast/browser-check";
 import { DiagnosticsService } from "../../packages/core/diagnostics";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
@@ -317,6 +318,9 @@ export async function createApp(options: AppOptions = {}) {
     };
   };
   app.get("/health", health);
+  app.get("/overlay/check", (_req, reply) =>
+    reply.type("text/html; charset=utf-8").send(browserCheckHtml),
+  );
   const diagnostics = new DiagnosticsService({
     mode,
     repo,

@@ -5,6 +5,9 @@ export default defineConfig({
   workers: 1,
   timeout: 30000,
   use: {
+    launchOptions: process.env.CHROMIUM_EXECUTABLE_PATH
+      ? { executablePath: process.env.CHROMIUM_EXECUTABLE_PATH }
+      : {},
     baseURL: "http://127.0.0.1:8790",
     viewport: { width: 1920, height: 1080 },
     trace: "retain-on-failure",

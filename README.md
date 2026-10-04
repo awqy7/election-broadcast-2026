@@ -1,3 +1,5 @@
+> Compatibilidade de overlay 1.0.2: removida dependência de `Array.at()`; build para Chromium 86+. Diagnóstico em `/overlay/check`. Veja [orientações para navegador incorporado](docs/BROWSER_COMPATIBILITY.md).
+
 > Instalador Windows 1.0.1: o atalho principal inicia diretamente o **OFICIAL**. A primeira abertura configura o sistema; falhas ficam em `data/startup.log` e a janela permanece aberta. O simulado exige abertura explícita pelo atalho separado.
 
 # Election Broadcast 2026

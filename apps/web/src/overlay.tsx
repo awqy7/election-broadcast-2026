@@ -425,7 +425,15 @@ export function BroadcastCanvas({
       style={{ width: 1920, height: 1080, transform: `scale(${scale})` }}
     >
       {preview && (
-        <div className="safe-area" style={{ inset: state.safeArea }} />
+        <div
+          className="safe-area"
+          style={{
+            top: state.safeArea,
+            right: state.safeArea,
+            bottom: state.safeArea,
+            left: state.safeArea,
+          }}
+        />
       )}
       {state.visible && (
         <div
@@ -441,7 +449,7 @@ export function BroadcastCanvas({
 export function Overlay() {
   const preview = new URLSearchParams(location.search).get("preview") === "1";
   const { output } = useOutput(preview);
-  const forced = location.pathname.split("/").at(-1);
+  const forced = location.pathname.split("/").pop();
   if (!output) return null;
   const testScene = [
     "top",

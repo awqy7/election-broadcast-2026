@@ -93,7 +93,7 @@ export class TseIngestionService {
       [...this.results.values()]
         .map((r) => r.receivedAt)
         .sort()
-        .at(-1) ?? null;
+        .slice(-1)[0] ?? null;
     this.photos = new CandidatePhotoService(
       options.photoDirectory,
       http,

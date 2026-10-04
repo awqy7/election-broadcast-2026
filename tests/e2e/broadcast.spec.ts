@@ -457,3 +457,48 @@ test("painel mock executa votos, progresso, falhas e situações", async ({
   expect((await press("PAUSAR / RETOMAR PROGRESSÃO")).auto).toBe(false);
   await command(page, "/api/mock", { action: "reset" });
 });
+
+test("overlay sem Array.at mantém cenas e SSE em navegador incorporado antigo", async ({
+  page,
+  context,
+}) => {
+  await context.addInitScript(() => {
+    Reflect.deleteProperty(Array.prototype, "at");
+  });
+  await login(page);
+  await command(page, "/api/mock", { action: "reset" });
+  await command(page, "/api/mock", { action: "progress:50" });
+  await command(page, "/api/preview", { scene: "top" });
+  await command(page, "/api/broadcast/take", {});
+  const output = await context.newPage();
+  const errors: string[] = [];
+  output.on("pageerror", (e) => errors.push(e.message));
+  await output.goto("/overlay/program");
+  await expect(output.locator('[data-scene="top"]')).toBeVisible();
+  await expect(output.locator(".candidate-row")).toHaveCount(4);
+  await output.screenshot({
+    path: "test-results/overlay-compatibility.png",
+    omitBackground: true,
+  });
+  await command(page, "/api/preview", { scene: "progress" });
+  await command(page, "/api/broadcast/take", {});
+  await expect(output.locator('[data-scene="progress"]')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("diagnóstico diferencia rede e programa fora do ar sem depender do bundle", async ({
+  page,
+  context,
+}) => {
+  await login(page);
+  await command(page, "/api/broadcast/clear", {});
+  const check = await context.newPage();
+  await check.goto("/overlay/check");
+  await expect(check.locator("#javascript")).toHaveText("JavaScript: OK");
+  await expect(check.locator("#http")).toHaveText("Servidor HTTP: OK");
+  await expect(check.locator("#events")).toContainText("Conexão SSE: OK");
+  await expect(check.locator("#program")).toContainText("FORA DO AR");
+  await command(page, "/api/preview", { scene: "top" });
+  await command(page, "/api/broadcast/take", {});
+  await expect(check.locator("#program")).toContainText("NO AR");
+});
