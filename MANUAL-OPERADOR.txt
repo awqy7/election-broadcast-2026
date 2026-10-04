@@ -1,0 +1,147 @@
+================================================================
+  ELECTION BROADCAST 2026 - MANUAL DO OPERADOR
+================================================================
+
+Este programa mostra os resultados da eleição. Ele pega os dados
+oficiais no site do TSE e entrega uma tela pronta para a transmissão.
+
+Nao precisa instalar nada: o programa ja vem pronto nesta pasta.
+
+
+----------------------------------------------------------------
+1. OS DOIS ENDERECOS
+----------------------------------------------------------------
+
+O programa entrega duas abas. Sao só elas. Anote as duas:
+
+  1. PAINEL   http://IP-DO-SERVIDOR:8787/studio
+              É onde voce escolhe a cena e manda para o ar.
+
+  2. SAÍDA    http://IP-DO-SERVIDOR:8787/overlay/program
+              É esta URL que vai para a transmissão.
+
+O IP aparece na tela do programa, no arquivo CHAVE-DE-ACESSO.txt
+e em INICIAR.bat, opcao 3 (DIAGNOSTICO).
+
+Se voce abre as abas no mesmo computador do programa, o endereco
+tambem funciona. Se abre de outro computador da rede, use o IP do
+computador que roda o programa.
+
+A aba da SAÍDA e a que vai para a transmissao. Nao mexa no endereco
+dela: quem troca a cena é o painel. E nao feche essa aba enquanto
+estiver transmitindo.
+
+
+----------------------------------------------------------------
+2. ABRIR O PROGRAMA
+----------------------------------------------------------------
+
+Execute INSTALAR.bat uma unica vez, na primeira utilizacao.
+
+Depois, todo dia, use INICIAR.bat. Ele traz um menu:
+
+  ENSAIO     dados de teste do TSE, com aviso SIMULACAO na tela.
+             Serve para treinar sem risco. Use esta para aprender.
+
+  OFICIAL    dados verdadeiros do TSE, sem aviso de simulacao.
+             Use somente para transmitir.
+
+  DIAGNOSTICO  testa se o programa esta respondendo.
+
+O programa abre uma janela preta e depois abre as duas abas
+automaticamente.
+
+ESSA JANELA PRECISA FICAR ABERTA.
+Fechar a janela encerra o programa, e a saida some da transmissao.
+
+
+----------------------------------------------------------------
+3. ENTRAR NO PAINEL
+----------------------------------------------------------------
+
+Na aba do PAINEL vai pedir a CHAVE DE ACESSO. Ela foi gerada na
+instalacao:
+
+  - esta no arquivo CHAVE-DE-ACESSO.txt, nesta mesma pasta
+  - ou na tela que apareceu quando voce instalou
+
+A sessao dura 16 horas. Se o programa for reiniciado, entre de novo.
+
+ATENCAO: a chave e como uma senha. Nao passe para quem nao deva ver
+os dados. Nao publique a pasta do programa na internet.
+
+
+----------------------------------------------------------------
+4. OPERAR O PAINEL (o dia a dia)
+----------------------------------------------------------------
+
+  TOP          mostra os mais votados
+  INDIVIDUAL   um candidato
+  COMPARAR     dois, tres ou quatro candidatos
+  APURACAO     percentual das secoes
+  TICKER       texto rodando
+
+Como colocar no ar:
+
+  1. Escolha o cargo e o lugar
+  2. Escolha a cena
+  3. Veja o PREVIEW (na parte de baixo)
+  4. Clique em TAKE  ->  o grafico vai para o programa
+  5. Clique em CLEAR ->  tira o grafico da tela na hora
+
+  HOLD   congela os numeros que estao no ar. Desligue o HOLD
+         antes do proximo TAKE.
+
+Atalhos:  1 a 5 trocam de cena | espaco faz TAKE | Esc faz CLEAR
+
+O botao "Abrir a saida", no painel, abre a aba 2 em uma nova
+aba do navegador. É so um atalho: nao muda nada.
+
+
+----------------------------------------------------------------
+5. ANTES DE TRANSMITIR
+----------------------------------------------------------------
+
+  - Teste no modo ENSAIO ate se sentir seguro
+  - Confira se o painel mostra OFICIAL, sem aviso de simulacao
+  - Abra o painel tecnico e rode o diagnostico
+  - Confira o cache de fotos do cargo que vai usar
+  - Teste TAKE, CLEAR e HOLD com a transmissao monitorada
+  - Combine um plano de internet de reserva: se a internet cair,
+    a saida some junto
+  - Nao atualize dependencias, nao reinstale e nao mexa no banco
+    durante a transmissao
+  - Evite fechar a janela preta sem querer
+
+
+----------------------------------------------------------------
+6. QUANDO DA ERRO
+----------------------------------------------------------------
+
+A saida some da transmissao
+  A janela preta do programa ainda esta aberta? Feche e abra de novo.
+
+"Source indisponivel" / TSE OFFLINE
+  O TSE pode estar lento ou fora do ar. Espere. O ultimo resultado
+  bom continua no ar. Nao troque para outro modo, nao reinicie o
+  programa varias vezes e NUNCA aumente o intervalo de consulta.
+
+O navegador diz que a pagina nao carrega
+  Confirme o endereco IP: se o painel esta em outro computador da
+  rede, o IP e o do computador que roda o programa, nao o seu.
+  Use 127.0.0.1 somente se o navegador estiver no mesmo computador
+  do programa.
+
+O diagnostico reclama de "Saida desconectada"
+  A aba da SAÍDA esta aberta? E a ela que se conecta a transmissao.
+
+A tela mostra aviso de SIMULACAO
+  Voce esta em ENSAIO. Para o ao vivo, feche e use INICIAR-OFICIAL.
+
+Antes de transmitir
+  Comece pelo checklist em docs\ELECTION_DAY_RUNBOOK.md
+
+
+================================================================
+Documentacao completa em docs\, inclusive diagnostico de problemas.
+================================================================

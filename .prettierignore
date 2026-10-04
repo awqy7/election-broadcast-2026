@@ -1,0 +1,8 @@
+node_modules
+dist
+data
+pnpm-lock.yaml
+docs/specs
+playwright-report
+test-results
+artifacts/
