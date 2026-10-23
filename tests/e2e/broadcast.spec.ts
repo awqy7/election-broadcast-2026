@@ -153,11 +153,15 @@ test("goldens 1080p de cinco overlays e transparência", async ({ page }) => {
   for (const width of [960, 634, 480]) {
     await page.setViewportSize({ width, height: Math.round((width * 9) / 16) });
     await expect(page.locator(".broadcast-module")).toBeVisible();
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-    ).toBe(true);
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        { timeout: 3000 },
+      )
+      .toBe(true);
     await page.screenshot({ path: `test-results/legibility-${width}.png` });
   }
 });
@@ -501,4 +505,120 @@ test("diagnóstico diferencia rede e programa fora do ar sem depender do bundle"
   await command(page, "/api/preview", { scene: "top" });
   await command(page, "/api/broadcast/take", {});
   await expect(check.locator("#program")).toContainText("NO AR");
+});
+
+test("2º turno: duelo direto, tela cheia e projeção matemática operam sem erros no navegador", async ({
+  page,
+  context,
+}) => {
+  await login(page);
+  await command(page, "/api/mock", { action: "reset" });
+  await command(page, "/api/mock", { action: "online" });
+  await command(page, "/api/mock", { action: "progress:75" });
+
+  const output = await context.newPage();
+  const errors: string[] = [];
+  output.on("pageerror", (e) => errors.push(e.message));
+
+  // 1. Cena de 2º Turno (runoff)
+  await command(page, "/api/preview", { scene: "runoff" });
+  await command(page, "/api/broadcast/take", {});
+  await output.goto("/overlay/program");
+  await expect(output.locator(".runoff-scene")).toBeVisible();
+  await expect(output.locator(".versus-badge")).toBeVisible();
+  await expect(output.locator(".runoff-candidate")).toHaveCount(2);
+
+  // 2. Cena Tela Cheia (fullscreen) - Mapa do Brasil (somente Presidente/Brasil)
+  await command(page, "/api/preview", {
+    scene: "fullscreen",
+    scope: "br",
+    officeCode: "0001",
+    fullscreenTab: "map",
+  });
+  await command(page, "/api/broadcast/take", {});
+  await expect(output.locator(".fullscreen-arena")).toBeVisible();
+  await expect(output.locator(".br-map-container")).toBeVisible();
+  await expect(output.locator(".br-state-path")).toHaveCount(27);
+  await expect(output.locator(".map-readout")).toBeVisible();
+  await expect(output.locator(".map-legend")).toBeVisible();
+  await expect(output.locator(".fullscreen-header")).toHaveCount(0);
+  await expect(output.locator(".fullscreen-footer")).toHaveCount(0);
+
+  // Testar clique/zoom em um estado (ex: SP) e exibição das cidades
+  await output.locator("#state-SP").click();
+  await expect(output.locator(".inspect-state-detail")).toBeVisible();
+  await expect(output.locator(".city-row-card")).toHaveCount(7);
+  await expect(output.locator(".map-legend")).toHaveCount(0);
+
+  // 2.1. Seleção de UF no Studio aplica direto no ar, sem TAKE
+  await expect(page.locator(".fs-map-quick-panel")).toBeVisible();
+  await page.locator(".chip-uf-btn", { hasText: /^GO$/ }).click();
+  await expect(output.locator(".dock-title-block h2")).toHaveText("Goiás");
+  const studioAfterFocus = await (await page.request.get("/api/studio")).json();
+  expect(studioAfterFocus.program.state.focusedUf).toBe("GO");
+
+  await page.locator(".btn-fs-reset-zoom").click();
+  await expect(output.locator(".map-legend")).toBeVisible();
+  const studioAfterReset = await (await page.request.get("/api/studio")).json();
+  expect(studioAfterReset.program.state.focusedUf).toBeNull();
+
+  // 2.2. Apuração em 100,0% permanece dentro do painel (nacional e zoom)
+  await command(page, "/api/mock", { action: "progress:100" });
+  await expect(output.locator(".map-readout-value")).toContainText("100,0%", {
+    timeout: 6000,
+  });
+  const nationalOverflow = await output.evaluate(() => {
+    const readout = document.querySelector(".map-readout")!;
+    const value = document.querySelector(".map-readout-value")!;
+    return (
+      value.getBoundingClientRect().right -
+      readout.getBoundingClientRect().right
+    );
+  });
+  expect(nationalOverflow).toBeLessThanOrEqual(1);
+
+  await output.locator("#state-SP").click();
+  await expect(output.locator(".inspect-state-detail")).toBeVisible();
+  const focusedOverflow = await output.evaluate(() => {
+    const readout = document.querySelector(".map-readout")!;
+    const value = document.querySelector(".map-readout-value")!;
+    return (
+      value.getBoundingClientRect().right -
+      readout.getBoundingClientRect().right
+    );
+  });
+  expect(focusedOverflow).toBeLessThanOrEqual(0);
+  await command(page, "/api/mock", { action: "progress:75" });
+
+  // 2.3. Mapa indisponível fora de Presidente/Brasil: cai no duelo
+  await command(page, "/api/preview", {
+    scene: "fullscreen",
+    scope: "municipality",
+    officeCode: "0003",
+    fullscreenTab: "map",
+  });
+  await command(page, "/api/broadcast/take", {});
+  await expect(output.locator(".fs-stage-duel")).toBeVisible();
+  await expect(output.locator(".br-map-container")).toHaveCount(0);
+
+  // 2.4. Cena Tela Cheia - Modo Duelo Nacional (duel)
+  await command(page, "/api/preview", {
+    scene: "fullscreen",
+    scope: "br",
+    officeCode: "0001",
+    fullscreenTab: "duel",
+  });
+  await command(page, "/api/broadcast/take", {});
+  await expect(output.locator(".fs-stage-duel")).toBeVisible();
+  await expect(output.locator(".fs-candidate")).toHaveCount(2);
+  await expect(output.locator(".fs-stat-deck")).toBeVisible();
+
+  // 3. Cena Projeção Matemática (projection)
+  await command(page, "/api/preview", { scene: "projection" });
+  await command(page, "/api/broadcast/take", {});
+  await expect(output.locator(".projection-scene")).toBeVisible();
+  await expect(output.locator(".proj-metrics-quad")).toBeVisible();
+
+  // Zero erros na página
+  expect(errors).toEqual([]);
 });

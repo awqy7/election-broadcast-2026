@@ -1,6 +1,6 @@
-> Compatibilidade de overlay 1.0.2: removida dependência de `Array.at()`; build para Chromium 86+. Diagnóstico em `/overlay/check`. Veja [orientações para navegador incorporado](docs/BROWSER_COMPATIBILITY.md).
+> Versão 1.1.0: mapa oficial por UF (27 arquivos EA20), fotos reais e 2º turno (`TSE_ROUND=2`). O mapa não usa mais dados sintéticos no modo oficial. Compatibilidade de overlay: Chromium 86+, sem `Array.at()`. Diagnóstico em `/overlay/check`. Veja [orientações para navegador incorporado](docs/BROWSER_COMPATIBILITY.md).
 
-> Instalador Windows 1.0.1: o atalho principal inicia diretamente o **OFICIAL**. A primeira abertura configura o sistema; falhas ficam em `data/startup.log` e a janela permanece aberta. O simulado exige abertura explícita pelo atalho separado.
+> Instalador Windows 1.1.0: o atalho principal inicia diretamente o **OFICIAL**. A primeira abertura configura o sistema; falhas ficam em `data/startup.log` e a janela permanece aberta. O simulado exige abertura explícita pelo atalho separado.
 
 # Election Broadcast 2026
 
@@ -58,7 +58,15 @@ No `.env`, defina `DATA_MODE=mock`. Reinicie com `pnpm start` e acesse `/test`. 
 
 O painel permite alterar votos, liderança, progresso, simular fonte offline, timeout, JSON inválido/parcial, foto ausente, substituição, anulação, anulado sub judice e segundo turno. A progressão automática percorre 0/3/12/25/48/67/82/95/99/100%; pause para ensaios controlados. Os nomes sintéticos existem apenas no gerador mock.
 
-Em produção, volte para `DATA_MODE=tse` e reinicie. Os arquivos em `docs/specs/*-live.json` são evidências de teste capturadas da fonte e **não são fallback de produção**.
+Em produção, volte para `DATA_MODE=tse`, confirme `TSE_ROUND=2` e reinicie. Os arquivos em `docs/specs/*-live.json` são evidências de teste capturadas da fonte e **não são fallback de produção**.
+
+## Mapa oficial e 2º turno
+
+No modo `tse`, o mapa do Brasil é montado com os 27 arquivos EA20 estaduais de Presidente, um por UF a cada 2 segundos. Cada estado usa votos e percentuais oficiais; UFs ainda não publicadas ficam neutras com “AGUARDANDO”. O selo verde **TSE OFICIAL** substitui a faixa de simulação. Não existe fallback para o mapa sintético no modo oficial.
+
+Em 25/10/2026, `TSE_ROUND=2` seleciona o pleito `3221`, eleição federal `6258` e estadual `6260`. O 2º turno presidencial cobre todos os estados no mapa. Já o detalhamento por cidade/zona e as eleições de governo só existem para as UFs com disputa estadual (AC, AM, DF, ES, RN e TO); para as demais, use **Brasil** ou **Estado** com o cargo **Presidente**. O Studio desabilita cidade/zona quando não há essa fonte.
+
+As fotos oficiais continuam vindo do diretório `ft` do EA11; no 2º turno o TSE mantém os mesmos `sqcand` de Lula e Flávio. O cache é reutilizado e o servidor não inventa identidade quando a foto não existe.
 
 ## Operação
 
@@ -78,13 +86,15 @@ A URL da saída é **`http://IP-DO-SERVIDOR:8787/overlay/program`**, dimensão *
 | Variável                    | Padrão / efeito                                              |
 | --------------------------- | ------------------------------------------------------------ |
 | DATA_MODE                   | `tse` oficial; `tse-sim` testes TSE; `mock` ensaio local     |
-| HOST / PORT                 | `127.0.0.1` / `8787`                                         |
+| HOST / PORT                 | `127.0.0.1` / `8787` (instalador usa o IP privado)           |
 | ADMIN_ACCESS_KEY            | Chave local gerada quando vazia                              |
 | DATA_DIR                    | `data`; diretório gravável para persistência                 |
 | TSE_HOST                    | `resultados.tse.jus.br`, somente hosts TSE HTTPS             |
+| TSE_ROUND                   | `2` para 25/10/2026; `1` para o 1º turno                     |
 | TSE_POLL_INTERVAL_MS        | `10000`, mínimo 2500; jitter adicional                       |
+| TSE_MAP_POLL_INTERVAL_MS    | `2000`; uma UF por vez, 27 UFs em ~54 s                      |
 | TSE_MIN_REQUEST_INTERVAL_MS | `1000`, mínimo 500; fila única incluindo fotos e diagnóstico |
-| TSE_TIMEOUT_MS              | `8000`                                                       |
+| TSE_TIMEOUT_MS              | `10000`                                                      |
 | DEFAULT_UF                  | `mg`                                                         |
 | DEFAULT_MUNICIPALITY_NAME   | `Teófilo Otoni`, resolvido no EA12                           |
 

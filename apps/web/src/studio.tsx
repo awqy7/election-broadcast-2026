@@ -16,12 +16,14 @@ import {
   type Output,
   type Settings,
 } from "../../../packages/shared";
-import { CandidatePhoto } from "./overlay";
+import { CandidatePhoto, displayCandidateName } from "./overlay";
 type Health = {
   server: string;
   database: string;
   tse: string;
   dataMode: string;
+  round?: string;
+  stateElectionAvailable?: boolean;
   lastFetchAt: string | null;
   lastChangedAt: string | null;
   lastSnapshotAt: string | null;
@@ -50,6 +52,10 @@ const scenes = [
   ["top", "TOP 4"],
   ["candidate", "INDIVIDUAL"],
   ["compare", "COMPARAÇÃO"],
+  ["runoff", "2º TURNO DUELO"],
+  ["fullscreen", "TELA CHEIA"],
+  ["projection", "PROJEÇÃO MATEMÁTICA"],
+  ["stats", "ESTATÍSTICAS"],
   ["progress", "APURAÇÃO"],
   ["ticker", "TICKER"],
 ] as const;
@@ -125,6 +131,16 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
   const [error, setError] = useState("");
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const [diagnosing, setDiagnosing] = useState(false);
+  const [municipalities, setMunicipalities] = useState<
+    { code: string; name: string; zones: string[] }[]
+  >([]);
+  const [defaultMunicipality, setDefaultMunicipality] = useState<{
+    code: string;
+    name: string;
+    zones?: string[];
+  } | null>(null);
+  const [selectedParty, setSelectedParty] = useState("all");
+  const [selectedStatus, setSelectedStatus] = useState("all");
   const [tab, setTab] = useState(
     location.pathname === "/studio/settings"
       ? "settings"
@@ -139,11 +155,15 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
         preview: Output;
         program: Output;
         favorites: string[];
+        municipalities?: { code: string; name: string; zones: string[] }[];
+        municipality?: { code: string; name: string; zones?: string[] } | null;
       }>("/api/studio");
       setInitial(data.preview);
       setProgram(data.program);
       setFavorites(data.favorites);
       setSettings((s) => s ?? data.preview.settings);
+      if (data.municipalities) setMunicipalities(data.municipalities);
+      if (data.municipality) setDefaultMunicipality(data.municipality);
     } catch (e) {
       setError(String(e));
     }
@@ -186,6 +206,13 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
     (body: Partial<BroadcastState>) => command("/api/preview", body),
     [command],
   );
+  const focusUfOnAir = useCallback(
+    async (uf: string | null) => {
+      await patch({ focusedUf: uf });
+      await command("/api/broadcast/take", {});
+    },
+    [patch, command],
+  );
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (
@@ -214,18 +241,83 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
     addEventListener("keydown", key);
     return () => removeEventListener("keydown", key);
   }, [patch, command]);
+  useEffect(() => {
+    if (health?.round !== "2") return;
+    const scope = current?.state.scope;
+    const office = current?.state.officeCode;
+    const localElection =
+      scope === "state" && health.stateElectionAvailable !== false;
+    if (
+      scope === "municipality" ||
+      scope === "zone" ||
+      (office !== "0001" && !localElection)
+    ) {
+      void patch({ scope: "br", officeCode: "0001" });
+    }
+  }, [
+    health?.round,
+    health?.stateElectionAvailable,
+    current?.state.scope,
+    current?.state.officeCode,
+    patch,
+  ]);
   if (!current)
     return (
       <main className="studio-loading">Carregando estado persistido…</main>
     );
   const { state, result } = current;
-  const candidates = (result?.candidates ?? []).filter(
-    (c) =>
-      normalizeName(
-        `${c.name} ${c.ballotName} ${c.number} ${c.partyAcronym} ${c.partyName}`,
-      ).includes(normalizeName(query)) &&
-      (!onlyFavorites || favorites.includes(c.id)),
-  );
+  const mapAvailable = state.scope === "br" && state.officeCode === "0001";
+  const fullscreenTab =
+    mapAvailable && state.fullscreenTab !== "duel" ? "map" : "duel";
+  const isRunoffContext =
+    state.scene === "runoff" ||
+    state.scene === "fullscreen" ||
+    state.officeCode === "0001" ||
+    state.scope === "br";
+
+  const rawCandidates = result?.candidates ?? [];
+  const baseCandidates = isRunoffContext
+    ? rawCandidates.filter((c) => c.number === "22" || c.number === "13")
+        .length >= 2
+      ? rawCandidates.filter((c) => c.number === "22" || c.number === "13")
+      : rawCandidates.slice(0, 2)
+    : rawCandidates;
+
+  const availableParties = [
+    ...new Set(baseCandidates.map((c) => c.partyAcronym)),
+  ].sort();
+  const activeMuCode =
+    state.municipalityCode ||
+    defaultMunicipality?.code ||
+    municipalities[0]?.code ||
+    "99999";
+  const activeMu =
+    municipalities.find((m) => m.code === activeMuCode) ?? defaultMunicipality;
+  const activeZones = activeMu?.zones?.length ? activeMu.zones : ["0001"];
+  const candidates = baseCandidates.filter((c) => {
+    const matchesQuery = normalizeName(
+      `${c.name} ${c.ballotName} ${c.number} ${c.partyAcronym} ${c.partyName}`,
+    ).includes(normalizeName(query));
+    const matchesFav = !onlyFavorites || favorites.includes(c.id);
+    const matchesParty =
+      selectedParty === "all" || c.partyAcronym === selectedParty;
+    let matchesStatus = true;
+    if (selectedStatus === "elected") {
+      matchesStatus =
+        c.electedFlag === "s" ||
+        (!!c.officialStatus && c.officialStatus !== "Não eleito");
+    } else if (selectedStatus === "valid") {
+      matchesStatus = !c.destination || c.destination === "Válido";
+    } else if (selectedStatus === "annulled") {
+      matchesStatus = !!c.destination && c.destination !== "Válido";
+    } else if (selectedStatus === "defined") {
+      matchesStatus =
+        result?.mathematicallyDefined === "s" ||
+        c.officialStatus === "Eleito" ||
+        c.officialStatus === "2º turno";
+    }
+    return matchesQuery && matchesFav && matchesParty && matchesStatus;
+  });
   const compare = (id: string) => {
     const ids =
       state.scene === "compare" && state.selectedCandidateIds.includes(id)
@@ -373,7 +465,9 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
               <h1>Controle de apuração</h1>
               <span>
                 {result
-                  ? `${result.candidates.length} candidatos`
+                  ? isRunoffContext
+                    ? "2 candidatos (2º Turno)"
+                    : `${result.candidates.length} candidatos`
                   : "Aguardando dados oficiais"}
               </span>
             </div>
@@ -383,20 +477,96 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                 <select
                   aria-label="Abrangência"
                   value={state.scope}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const newScope = e.target.value as BroadcastState["scope"];
                     void patch({
-                      scope: e.target.value as BroadcastState["scope"],
-                      ...(e.target.value === "br"
-                        ? { officeCode: "0001" }
+                      scope: newScope,
+                      ...(newScope === "br" ? { officeCode: "0001" } : {}),
+                      ...(newScope === "zone" && !state.zoneCode
+                        ? { zoneCode: activeZones[0] ?? "0001" }
                         : {}),
-                    })
-                  }
+                    });
+                  }}
                 >
-                  <option value="municipality">Teófilo Otoni • MG</option>
-                  <option value="state">Minas Gerais</option>
+                  <option
+                    value="municipality"
+                    disabled={
+                      health?.round === "2" &&
+                      health.stateElectionAvailable === false
+                    }
+                  >
+                    Cidade / Município
+                  </option>
+                  <option
+                    value="zone"
+                    disabled={
+                      health?.round === "2" &&
+                      health.stateElectionAvailable === false
+                    }
+                  >
+                    Zona Eleitoral
+                  </option>
+                  <option value="state">Minas Gerais (Estado)</option>
                   <option value="br">Brasil</option>
                 </select>
+                {health?.round === "2" &&
+                  health.stateElectionAvailable === false && (
+                    <small className="scope-note">
+                      2º turno: cidade/zona só estão disponíveis para AC, AM,
+                      DF, ES, RN e TO (disputa de governo). Para Presidente, use
+                      Brasil ou Estado.
+                    </small>
+                  )}
               </label>
+              {(state.scope === "municipality" || state.scope === "zone") && (
+                <label>
+                  Cidade
+                  <select
+                    aria-label="Cidade"
+                    value={state.municipalityCode ?? activeMuCode}
+                    onChange={(e) => {
+                      const muCode = e.target.value;
+                      const selected = municipalities.find(
+                        (m) => m.code === muCode,
+                      );
+                      void patch({
+                        municipalityCode: muCode,
+                        zoneCode: selected?.zones?.[0] ?? null,
+                      });
+                    }}
+                  >
+                    {municipalities.length ? (
+                      municipalities.map((m) => (
+                        <option key={m.code} value={m.code}>
+                          {m.name}
+                        </option>
+                      ))
+                    ) : (
+                      <option value={activeMuCode}>
+                        {activeMu?.name ??
+                          defaultMunicipality?.name ??
+                          "Carregando…"}
+                      </option>
+                    )}
+                  </select>
+                </label>
+              )}
+              {state.scope === "zone" && (
+                <label>
+                  Zona Eleitoral
+                  <select
+                    aria-label="Zona Eleitoral"
+                    value={state.zoneCode ?? activeZones[0] ?? "0001"}
+                    onChange={(e) => void patch({ zoneCode: e.target.value })}
+                  >
+                    {activeZones.map((z) => (
+                      <option key={z} value={z}>
+                        Zona {z}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label>
                 Cargo
                 <select
@@ -415,6 +585,12 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                       value={code}
                       disabled={
                         (state.scope === "br" && code !== "0001") ||
+                        (health?.round === "2" &&
+                          code !== "0001" &&
+                          !(
+                            state.scope === "state" &&
+                            health.stateElectionAvailable !== false
+                          )) ||
                         code === "0008"
                       }
                     >
@@ -445,6 +621,29 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
+              <select
+                aria-label="Filtrar por partido"
+                value={selectedParty}
+                onChange={(e) => setSelectedParty(e.target.value)}
+              >
+                <option value="all">Todos os partidos</option>
+                {availableParties.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="Filtrar por situação"
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+              >
+                <option value="all">Todas as situações</option>
+                <option value="elected">Eleitos / 2º Turno</option>
+                <option value="valid">Votos Válidos</option>
+                <option value="annulled">Sub judice / Anulados</option>
+                <option value="defined">Definidos matematicamente</option>
+              </select>
               <button
                 className={onlyFavorites ? "selected" : ""}
                 onClick={() => setOnlyFavorites(!onlyFavorites)}
@@ -505,8 +704,25 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                         <div className="table-identity">
                           <CandidatePhoto candidate={c} />
                           <div>
-                            <strong>{c.ballotName}</strong>
-                            <small>{c.number}</small>
+                            <strong>{displayCandidateName(c)}</strong>
+                            <small>
+                              {c.number}
+                              {c.viceOrAlternates?.[0] && (
+                                <span className="table-vice">
+                                  {" "}
+                                  • Vice: {c.viceOrAlternates[0].nmu} (
+                                  {c.viceOrAlternates[0].sgp})
+                                </span>
+                              )}
+                              {!c.viceOrAlternates?.[0] &&
+                                c.substitutes?.[0] && (
+                                  <span className="table-vice">
+                                    {" "}
+                                    • Suplente: {c.substitutes[0].nmu} (
+                                    {c.substitutes[0].sgp})
+                                  </span>
+                                )}
+                            </small>
                           </div>
                         </div>
                       </td>
@@ -547,7 +763,7 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                             COMPARAR
                           </button>
                           <button
-                            aria-label={`Favoritar ${c.ballotName}`}
+                            aria-label={`Favoritar ${displayCandidateName(c)}`}
                             aria-pressed={favorites.includes(c.id)}
                             onClick={() =>
                               void command("/api/favorites", { id: c.id })
@@ -631,6 +847,7 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                     "bottom-left",
                     "bottom-center",
                     "bottom-right",
+                    "fullscreen",
                   ].map((p) => (
                     <option key={p}>{p}</option>
                   ))}
@@ -666,12 +883,217 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                   </select>
                 </label>
               </div>
+              {state.scene === "fullscreen" && (
+                <div className="fullscreen-controls-box">
+                  <div className="fs-mode-buttons">
+                    <button
+                      type="button"
+                      className={`fs-mode-btn ${fullscreenTab === "map" ? "btn-active" : ""}`}
+                      disabled={!mapAvailable}
+                      title={
+                        mapAvailable
+                          ? "Mapa do Brasil em tela cheia"
+                          : "Disponível apenas para Presidente • Brasil"
+                      }
+                      onClick={() => {
+                        if (mapAvailable) void patch({ fullscreenTab: "map" });
+                      }}
+                    >
+                      🗺️ Mapa do Brasil
+                    </button>
+                    <button
+                      type="button"
+                      className={`fs-mode-btn ${fullscreenTab === "duel" ? "btn-active" : ""}`}
+                      onClick={() => void patch({ fullscreenTab: "duel" })}
+                    >
+                      ⚔️ Duelo 22 x 13
+                    </button>
+                  </div>
+
+                  {!mapAvailable && (
+                    <p className="fs-map-locked-note">
+                      O mapa nacional está disponível somente para{" "}
+                      <b>Presidente • Brasil</b>. Para outros cargos ou
+                      abrangências, use o duelo.
+                    </p>
+                  )}
+
+                  {mapAvailable && fullscreenTab === "map" && (
+                    <div className="fs-map-quick-panel">
+                      <button
+                        type="button"
+                        className={`btn-fs-reset-zoom ${!state.focusedUf ? "is-all-brasil" : "has-focus"}`}
+                        onClick={() => void focusUfOnAir(null)}
+                      >
+                        {state.focusedUf
+                          ? `◀ VOLTAR AO BRASIL (Foco: ${state.focusedUf})`
+                          : "✓ BRASIL COMPLETO (VISÃO GERAL)"}
+                      </button>
+
+                      <p className="fs-auto-hint">
+                        <b>AUTO</b> Clique em um estado para aplicar direto no
+                        ar, sem TAKE.
+                      </p>
+
+                      <div className="fs-regions-chips-block">
+                        <div className="region-chip-row">
+                          <span className="reg-badge">Sudeste</span>
+                          {["SP", "MG", "RJ", "ES"].map((uf) => (
+                            <button
+                              key={uf}
+                              type="button"
+                              className={`chip-uf-btn ${state.focusedUf === uf ? "uf-selected" : ""}`}
+                              onClick={() =>
+                                void focusUfOnAir(
+                                  state.focusedUf === uf ? null : uf,
+                                )
+                              }
+                            >
+                              {uf}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="region-chip-row">
+                          <span className="reg-badge">Sul</span>
+                          {["PR", "SC", "RS"].map((uf) => (
+                            <button
+                              key={uf}
+                              type="button"
+                              className={`chip-uf-btn ${state.focusedUf === uf ? "uf-selected" : ""}`}
+                              onClick={() =>
+                                void focusUfOnAir(
+                                  state.focusedUf === uf ? null : uf,
+                                )
+                              }
+                            >
+                              {uf}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="region-chip-row">
+                          <span className="reg-badge">Nordeste</span>
+                          {[
+                            "BA",
+                            "PE",
+                            "CE",
+                            "MA",
+                            "PB",
+                            "RN",
+                            "AL",
+                            "PI",
+                            "SE",
+                          ].map((uf) => (
+                            <button
+                              key={uf}
+                              type="button"
+                              className={`chip-uf-btn ${state.focusedUf === uf ? "uf-selected" : ""}`}
+                              onClick={() =>
+                                void focusUfOnAir(
+                                  state.focusedUf === uf ? null : uf,
+                                )
+                              }
+                            >
+                              {uf}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="region-chip-row">
+                          <span className="reg-badge">C.-Oeste</span>
+                          {["DF", "GO", "MT", "MS"].map((uf) => (
+                            <button
+                              key={uf}
+                              type="button"
+                              className={`chip-uf-btn ${state.focusedUf === uf ? "uf-selected" : ""}`}
+                              onClick={() =>
+                                void focusUfOnAir(
+                                  state.focusedUf === uf ? null : uf,
+                                )
+                              }
+                            >
+                              {uf}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="region-chip-row">
+                          <span className="reg-badge">Norte</span>
+                          {["PA", "AM", "RO", "TO", "AC", "AP", "RR"].map(
+                            (uf) => (
+                              <button
+                                key={uf}
+                                type="button"
+                                className={`chip-uf-btn ${state.focusedUf === uf ? "uf-selected" : ""}`}
+                                onClick={() =>
+                                  void focusUfOnAir(
+                                    state.focusedUf === uf ? null : uf,
+                                  )
+                                }
+                              >
+                                {uf}
+                              </button>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <label className="fs-select-fallback">
+                    <span>Focar Estado (Lista)</span>
+                    <select
+                      value={state.focusedUf ?? ""}
+                      onChange={(e) =>
+                        void focusUfOnAir(
+                          e.target.value ? e.target.value : null,
+                        )
+                      }
+                    >
+                      <option value="">Brasil (Visão Geral)</option>
+                      {[
+                        "AC",
+                        "AL",
+                        "AP",
+                        "AM",
+                        "BA",
+                        "CE",
+                        "DF",
+                        "ES",
+                        "GO",
+                        "MA",
+                        "MT",
+                        "MS",
+                        "MG",
+                        "PA",
+                        "PB",
+                        "PR",
+                        "PE",
+                        "PI",
+                        "RJ",
+                        "RN",
+                        "RS",
+                        "RO",
+                        "RR",
+                        "SC",
+                        "SP",
+                        "SE",
+                        "TO",
+                      ].map((uf) => (
+                        <option key={uf} value={uf}>
+                          {uf}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
               {(
                 [
                   ["showParty", "Partido"],
                   ["showVotes", "Votos"],
                   ["showPhoto", "Foto"],
                   ["showTimestamp", "Horário"],
+                  ["showVice", "Vice/Suplente"],
+                  ["showStats", "Estatísticas"],
+                  ["showEffects", "Efeitos / Animações"],
                 ] as const
               ).map(([field, label]) => (
                 <label className="checkbox" key={field}>

@@ -17,6 +17,7 @@ export class BroadcastStateService {
   programSettings: Settings;
   favorites: string[];
   sequence = 0;
+  mapProvider: (() => Output["map"]) | null = null;
   constructor(
     private repo: SnapshotRepository,
     private mode: "tse" | "mock" | "tse-sim",
@@ -42,6 +43,7 @@ export class BroadcastStateService {
       settings: preview ? this.settings : this.programSettings,
       dataMode: this.mode,
       sequence: this.sequence,
+      map: this.mapProvider?.() ?? null,
     };
   }
   update(patch: unknown) {

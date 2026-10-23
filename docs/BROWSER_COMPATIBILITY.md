@@ -1,4 +1,4 @@
-# Overlay em navegador incorporado — versão 1.0.2
+# Overlay em navegador incorporado — versão 1.1.0
 
 ## Falha identificada
 

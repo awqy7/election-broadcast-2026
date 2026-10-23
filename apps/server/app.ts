@@ -36,6 +36,7 @@ export interface AppOptions {
   adminKey?: string;
   startScheduler?: boolean;
   logger?: boolean;
+  round?: "1" | "2";
 }
 export async function createApp(options: AppOptions = {}) {
   const mode =
@@ -109,6 +110,15 @@ export async function createApp(options: AppOptions = {}) {
         .min(2500)
         .max(600000)
         .parse(process.env.TSE_POLL_INTERVAL_MS ?? 10000),
+      mapInterval: z.coerce
+        .number()
+        .finite()
+        .int()
+        .min(1000)
+        .max(60000)
+        .parse(process.env.TSE_MAP_POLL_INTERVAL_MS ?? 2000),
+      round:
+        options.round ?? z.enum(["1", "2"]).parse(process.env.TSE_ROUND ?? "2"),
       photoDirectory: resolve(directory, "cache/photos"),
     },
     () => broadcast.active(),
@@ -121,6 +131,7 @@ export async function createApp(options: AppOptions = {}) {
     (event) => hub.publish(event),
   );
   const hub: SseHub = new SseHub((p) => broadcast.output(p));
+  broadcast.mapProvider = () => engine.mapSnapshot();
   const freshness = new FreshnessMonitor();
   await app.register(cookie);
   await app.register(multipart, { limits: { fileSize: 2_000_000, files: 1 } });
@@ -172,7 +183,14 @@ export async function createApp(options: AppOptions = {}) {
   });
   app.post(
     "/api/login",
-    { config: { rateLimit: { max: 8, timeWindow: "1 minute" } } },
+    {
+      config: {
+        rateLimit: {
+          max: mode === "mock" || process.env.NODE_ENV === "test" ? 100 : 30,
+          timeWindow: "1 minute",
+        },
+      },
+    },
     async (req, reply) => {
       const { key } = z.object({ key: z.string().max(200) }).parse(req.body);
       if (!timingSafeEqual(Buffer.from(hash(key)), Buffer.from(adminHash)))
@@ -201,7 +219,9 @@ export async function createApp(options: AppOptions = {}) {
     program: broadcast.output(),
     favorites: broadcast.favorites,
     municipality: engine.municipality,
+    municipalities: engine.municipalitiesList,
   }));
+  app.get("/api/municipalities", async () => engine.municipalitiesList);
   app.get("/api/output", async (req) =>
     broadcast.output((req.query as { preview?: string }).preview === "1"),
   );
@@ -314,6 +334,9 @@ export async function createApp(options: AppOptions = {}) {
           : 0,
       },
       configValidated: engine.config.validated,
+      round: engine.config.round,
+      stateElectionAvailable: engine.stateElectionAvailable,
+      map: engine.mapStatus(),
       municipality: engine.municipality,
     };
   };

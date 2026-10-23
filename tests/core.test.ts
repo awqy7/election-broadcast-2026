@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { EA11Schema, EA12Schema, EA20Schema } from "../packages/tse/schemas";
 import {
   ElectionConfigService,
+  initialElectionConfig,
   simulationElectionConfig,
   MunicipalityService,
   TseUrlBuilder,
@@ -20,13 +21,19 @@ import {
   formatPercent,
   normalizeName,
   reduceState,
+  resultKey,
   sortCandidates,
   stateSchema,
+  calculateRunoffProjection,
+  calculateSeatsProjection,
+  calculateBrazilMapResults,
+  type BrazilMapOfficialData,
 } from "../packages/shared";
 import { SnapshotRepository } from "../packages/core/repository";
 import { FreshnessMonitor } from "../packages/core/freshness";
 import { RateLimiter, TseHttpClient, backoff } from "../packages/tse/http";
 import { BroadcastStateService } from "../packages/broadcast/state";
+import { TseIngestionService } from "../packages/tse/ingestion";
 const context = {
   office: "0003" as const,
   scopeType: "mu" as const,
@@ -49,8 +56,21 @@ describe("Contratos oficiais e integridade", () => {
     const raw = JSON.parse(readFileSync("docs/specs/ea11-live.json", "utf8"));
     const config = ElectionConfigService.fromEA11(raw);
     expect(config.pleito).toBe("3220");
+    expect(config.round).toBe("1");
     expect(config.validated).toBe(true);
     expect(EA11Schema.parse(raw).arq.length).toBeGreaterThan(0);
+  });
+  it("descobre o 2º turno oficial pelo turno configurado", () => {
+    const raw = JSON.parse(readFileSync("docs/specs/ea11-live.json", "utf8"));
+    const config = ElectionConfigService.fromEA11(raw, {
+      ...initialElectionConfig,
+      round: "2",
+    });
+    expect(config.pleito).toBe("3221");
+    expect(config.round).toBe("2");
+    expect(config.date).toBe("25/10/2026");
+    expect(config.federalElectionId).toBe("6258");
+    expect(config.stateElectionId).toBe("6260");
   });
   it("resolve município no EA12 real sem código embutido no motor", () => {
     const raw = JSON.parse(readFileSync("docs/specs/ea12-live.json", "utf8"));
@@ -168,9 +188,65 @@ describe("Contratos oficiais e integridade", () => {
     expect(formatVotes(12320)).toBe("12.320");
     expect(formatPercent(42.5)).toBe("42,5%");
   });
+  it("suporta zona eleitoral e municípios no TseUrlBuilder e MunicipalityService", () => {
+    const urls = new TseUrlBuilder(mockConfig);
+    expect(urls.ea20("0003", "zone", "mg", "53716", "269")).toContain(
+      "mg53716-z0269-c0003-e006259-u.json",
+    );
+    expect(() => urls.ea20("0003", "zone", "mg", "53716")).toThrow(
+      "ZONE_NOT_FOUND",
+    );
+    const doc = JSON.parse(readFileSync("docs/specs/ea12-live.json", "utf8"));
+    const list = MunicipalityService.listMunicipalities("mg", doc);
+    expect(list.length).toBe(853);
+    const bh = list.find((m) => m.name === "BELO HORIZONTE");
+    expect(bh?.zones.length).toBeGreaterThan(1);
+    const resolved = MunicipalityService.resolveByCode("mg", "53716", doc);
+    expect(resolved.name).toBe("TEÓFILO OTONI");
+    expect(resolved.zones).toContain("0269");
+  });
+  it("extrai estatísticas eleitorais (eleitorado, comparecimento, brancos, nulos) do EA20", () => {
+    const simRaw = JSON.parse(readFileSync("docs/specs/ea20-sim.json", "utf8"));
+    const simResult = ResultNormalizer.normalize(simRaw, {
+      ...context,
+      mode: "tse-sim",
+      scopeCode: simRaw.cdabr,
+      electionId: simRaw.ele,
+    });
+    expect(simResult.stats).toBeDefined();
+    expect(simResult.stats?.electorateTotal).toBe(107365);
+    expect(simResult.stats?.turnout).toBe(91432);
+    expect(simResult.stats?.turnoutPercent).toBe(85.16);
+    expect(simResult.stats?.blankVotes).toBe(5841);
+    expect(simResult.stats?.nullVotes).toBe(6292);
+    expect(simResult.stats?.validVotes).toBe(66104);
+  });
+  it("BroadcastState e reducer suportam cena stats, zonas e filtros", () => {
+    const s = stateSchema.parse({});
+    expect(s.scene).toBe("top");
+    expect(s.showVice).toBe(true);
+    expect(s.showStats).toBe(true);
+    const statsState = reduceState(s, {
+      scene: "stats",
+      scope: "zone",
+      municipalityCode: "53716",
+      zoneCode: "0269",
+    });
+    expect(statsState.scene).toBe("stats");
+    expect(statsState.scope).toBe("zone");
+    expect(statsState.municipalityCode).toBe("53716");
+    expect(statsState.zoneCode).toBe("0269");
+    expect(resultKey(statsState)).toBe("zone:53716:0269:0003");
+  });
   it("reducer limpa seleção e rejeita Brasil/governador", () => {
     const s = stateSchema.parse({ selectedCandidateIds: ["x"] });
     expect(reduceState(s, { officeCode: "0005" }).selectedCandidateIds).toEqual(
+      [],
+    );
+    expect(
+      reduceState(s, { municipalityCode: "41238" }).selectedCandidateIds,
+    ).toEqual([]);
+    expect(reduceState(s, { zoneCode: "0002" }).selectedCandidateIds).toEqual(
       [],
     );
     expect(() => reduceState(s, { scope: "br" })).toThrow();
@@ -233,6 +309,46 @@ describe("Persistência, HOLD e HTTP", () => {
     expect(restored.output().result!.candidates[0].votes).toBe(frozen);
     service.clear();
     expect(service.program.visible).toBe(false);
+  });
+  it("restauração preserva resultados de zona e município compatíveis com resultKey", () => {
+    const mock = new MockSource();
+    const doc = mock.document("0003", "zone", "53716", "0269");
+    const result = ResultNormalizer.normalize(doc, {
+      ...context,
+      scopeType: "zona",
+      scopeCode: "0269",
+      municipalityCode: "53716",
+      zoneCode: "0269",
+      resource: "mock://zone:53716:0269:0003",
+    });
+    expect(repo.save(result, doc)).toBe(true);
+    const http = new TseHttpClient(repo, new RateLimiter(), 1000);
+    const ingestion = new TseIngestionService(
+      "mock",
+      repo,
+      http,
+      {
+        host: "localhost",
+        uf: "mg",
+        municipalityName: "Teófilo Otoni",
+        interval: 1000,
+        photoDirectory: join(dir, "photos"),
+      },
+      () => [],
+      () => {},
+    );
+    const targetState = stateSchema.parse({
+      scope: "zone",
+      officeCode: "0003",
+      municipalityCode: "53716",
+      zoneCode: "0269",
+    });
+    const restored = ingestion.result(targetState);
+    expect(restored).not.toBeNull();
+    expect(restored?.scopeType).toBe("zona");
+    expect(restored?.zoneCode).toBe("0269");
+    expect(restored?.municipalityCode).toBe("53716");
+    expect(restored?.stats?.electorateTotal).toBeGreaterThan(0);
   });
   it("preview não altera programa e TAKE é auditado", () => {
     const service = new BroadcastStateService(
@@ -375,4 +491,240 @@ it("normaliza EA20 baixado do simulado TSE com votos e status publicados", () =>
     result.candidates[1].votes,
   );
   expect(result.environment).toBe("simulado2026");
+});
+
+it("filtros de estúdio e normalização de zona eleitoral operam com fidelidade", () => {
+  const mock = new MockSource();
+  const doc = mock.document("0003", "zone", "53716", "0269");
+  expect(doc.tpabr).toBe("zona");
+  expect(doc.cdabr).toBe("0269");
+  const res = ResultNormalizer.normalize(doc, {
+    ...context,
+    scopeType: "zona",
+    scopeCode: "0269",
+    municipalityCode: "53716",
+    zoneCode: "0269",
+  });
+  expect(res.scopeType).toBe("zona");
+  expect(res.zoneCode).toBe("0269");
+  expect(res.municipalityCode).toBe("53716");
+
+  // Predicados de filtro do Studio
+  const candidates = res.candidates;
+  expect(candidates.length).toBeGreaterThan(0);
+
+  // Filtro por partido
+  const firstParty = candidates[0].partyAcronym;
+  const filteredByParty = candidates.filter(
+    (c) => c.partyAcronym === firstParty,
+  );
+  expect(filteredByParty.every((c) => c.partyAcronym === firstParty)).toBe(
+    true,
+  );
+
+  // Filtro por situação válida
+  const validCandidates = candidates.filter(
+    (c) => !c.destination || c.destination === "Válido",
+  );
+  expect(validCandidates.length).toBeGreaterThan(0);
+
+  // Definidos matematicamente
+  res.mathematicallyDefined = "s";
+  const definedCandidates = candidates.filter(
+    (c) =>
+      res.mathematicallyDefined === "s" ||
+      c.officialStatus === "Eleito" ||
+      c.officialStatus === "2º turno",
+  );
+  expect(definedCandidates.length).toBe(candidates.length);
+});
+
+it("segundo turno: cálculo de projeção matemática de vitória e limiar de confirmação", () => {
+  const mock = new MockSource();
+  const doc = mock.document("0003", "state");
+  const res = ResultNormalizer.normalize(doc, {
+    ...context,
+    scopeType: "uf",
+    scopeCode: "mg",
+  });
+
+  const proj = calculateRunoffProjection(res);
+  expect(proj.hasRunoff).toBe(true);
+  expect(proj.leader).not.toBeNull();
+  expect(proj.runnerUp).not.toBeNull();
+  expect(proj.marginVotes).toBeGreaterThanOrEqual(0);
+  expect(proj.statusLabel).toBeDefined();
+
+  // Testar caso em que o líder tem vantagem irreversível (matematicamente eleito)
+  const mathElectedRes = {
+    ...res,
+    sectionsTotal: 100,
+    sectionsTotalized: 98,
+    candidates: [
+      {
+        ...res.candidates[0],
+        votes: 1000000,
+        percentage: 55.0,
+      },
+      {
+        ...res.candidates[1],
+        votes: 800000,
+        percentage: 45.0,
+      },
+    ],
+  };
+  const electedProj = calculateRunoffProjection(mathElectedRes);
+  expect(electedProj.isMathematicallyElected).toBe(true);
+  expect(electedProj.statusLabel).toBe("MATEMATICAMENTE ELEITO");
+  expect(electedProj.votesToSealVictory).toBe(0);
+});
+
+it("sistema proporcional: cálculo de quociente eleitoral, partidário e sobras (D'Hondt)", () => {
+  const mock = new MockSource();
+  const doc = mock.document("0006", "state");
+  const res = ResultNormalizer.normalize(doc, {
+    ...context,
+    office: "0006",
+    scopeType: "uf",
+    scopeCode: "mg",
+  });
+
+  const seats = calculateSeatsProjection(res, 53);
+  expect(seats.totalSeats).toBe(53);
+  expect(seats.electoralQuotient).toBeGreaterThan(0);
+  expect(seats.parties.length).toBeGreaterThan(0);
+
+  // A soma de todas as cadeiras distribuídas deve ser 53
+  const totalAllocated = seats.parties.reduce(
+    (acc, p) => acc + p.totalSeats,
+    0,
+  );
+  expect(totalAllocated).toBe(53);
+});
+
+it("BroadcastState suporta novas cenas de 2º turno, fullscreen, projeção e efeitos", () => {
+  const s = stateSchema.parse({
+    scene: "runoff",
+    position: "fullscreen",
+    showEffects: true,
+  });
+  expect(s.scene).toBe("runoff");
+  expect(s.position).toBe("fullscreen");
+  expect(s.showEffects).toBe(true);
+
+  const s2 = reduceState(s, { scene: "fullscreen" });
+  expect(s2.scene).toBe("fullscreen");
+
+  const s3 = reduceState(s, { scene: "projection" });
+  expect(s3.scene).toBe("projection");
+});
+
+it("projeções tratam casos extremos: dados vazios, empate e ausência de seções", () => {
+  // 1. Resultado nulo ou sem candidatos
+  const emptyProj = calculateRunoffProjection(null);
+  expect(emptyProj.hasRunoff).toBe(false);
+  expect(emptyProj.leader).toBeNull();
+  expect(emptyProj.isMathematicallyElected).toBe(false);
+
+  // 2. Apenas um candidato
+  const singleCandRes = {
+    ...normalize(),
+    candidates: [normalize().candidates[0]],
+  };
+  const singleProj = calculateRunoffProjection(singleCandRes);
+  expect(singleProj.hasRunoff).toBe(false);
+  expect(singleProj.runnerUp).toBeNull();
+
+  // 3. Empate exato entre primeiro e segundo
+  const tiedRes = {
+    ...normalize(),
+    candidates: [
+      { ...normalize().candidates[0], votes: 5000, percentage: 50.0 },
+      { ...normalize().candidates[1], votes: 5000, percentage: 50.0 },
+    ],
+  };
+  const tiedProj = calculateRunoffProjection(tiedRes);
+  expect(tiedProj.marginVotes).toBe(0);
+  expect(tiedProj.marginPercent).toBe(0);
+
+  // 4. Projeção de cadeiras com resultado nulo
+  const emptySeats = calculateSeatsProjection(null);
+  expect(emptySeats.parties).toEqual([]);
+  expect(emptySeats.electoralQuotient).toBe(0);
+
+  // 5. Projeção de cadeiras com 10 cadeiras e distribuição precisa
+  const customSeats = calculateSeatsProjection(normalize(), 10);
+  expect(customSeats.totalSeats).toBe(10);
+  const sumSeats = customSeats.parties.reduce(
+    (acc, p) => acc + p.totalSeats,
+    0,
+  );
+  expect(sumSeats).toBe(10);
+});
+
+describe("Mapa oficial por UF", () => {
+  const official: BrazilMapOfficialData = {
+    updatedAt: "2026-10-25T18:00:00.000Z",
+    states: {
+      SP: {
+        uf: "SP",
+        votes22: 12_000_000,
+        votes13: 9_000_000,
+        percent22: 57.14,
+        percent13: 42.86,
+        sectionsPercent: 96.4,
+        final: false,
+        validVotes: 21_000_000,
+        receivedAt: "2026-10-25T18:00:00.000Z",
+        sourceGeneratedAt: "2026-10-25T18:00:00.000Z",
+      },
+      MG: {
+        uf: "MG",
+        votes22: 4_000_000,
+        votes13: 5_000_000,
+        percent22: 44.44,
+        percent13: 55.56,
+        sectionsPercent: 88.1,
+        final: false,
+        validVotes: 9_000_000,
+        receivedAt: "2026-10-25T17:59:00.000Z",
+        sourceGeneratedAt: "2026-10-25T17:59:00.000Z",
+      },
+    },
+  };
+  it("usa votos e percentuais oficiais sem gerar cidades fictícias", () => {
+    const summary = calculateBrazilMapResults(null, official);
+    expect(summary.official).toBe(true);
+    expect(summary.statesLoaded).toBe(2);
+    expect(summary.statesTotal).toBe(27);
+    expect(summary.statesWon22).toBe(1);
+    expect(summary.statesWon13).toBe(1);
+    expect(summary.stateResults.SP.percent22).toBe(57.14);
+    expect(summary.stateResults.SP.cities).toEqual([]);
+    expect(summary.stateResults.MG.leader).toBe("13");
+    expect(summary.updatedAt).toBe(official.updatedAt);
+  });
+  it("mantém UFs ausentes neutras e trata 0% como aguardando", () => {
+    const summary = calculateBrazilMapResults(null, {
+      updatedAt: null,
+      states: {},
+    });
+    expect(summary.official).toBe(true);
+    expect(summary.statesLoaded).toBe(0);
+    expect(summary.leadingNational).toBe("tie");
+    expect(summary.stateResults.AC.leader).toBe("tie");
+    expect(summary.stateResults.AC.statusLabel).toBe("AGUARDANDO");
+    expect(summary.stateResults.AC.votes22).toBe(0);
+  });
+  it("não troca o mapa oficial por dados sintéticos quando não há UF", () => {
+    const synthetic = calculateBrazilMapResults(null);
+    expect(synthetic.official).toBe(false);
+    expect(synthetic.statesLoaded).toBe(27);
+    const emptyOfficial = calculateBrazilMapResults(null, {
+      updatedAt: null,
+      states: {},
+    });
+    expect(emptyOfficial.statesWon22).toBe(0);
+    expect(emptyOfficial.statesWon13).toBe(0);
+  });
 });

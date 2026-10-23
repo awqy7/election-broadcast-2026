@@ -11,9 +11,11 @@
 - [ ] Painel abrindo pelo **IP do servidor**, e não por `127.0.0.1`.
 - [ ] `INICIAR-OFICIAL.bat` aberto e respondendo; janela preta fica aberta o dia todo.
 - [ ] Studio informa **OFICIAL**, sem faixa SIMULAÇÃO.
-- [ ] `/health`: server/database OK.
-- [ ] Diagnóstico: DNS/HTTPS TSE, EA11, EA12 e município resolvido.
-- [ ] Diagnóstico EA20 conferido; pré-apuração aceita como espera, não erro.
+- [ ] `/health`: server/database OK, `round` igual a `2` e `map.loaded` chegando a 27/27.
+- [ ] Diagnóstico: DNS/HTTPS TSE, EA11, EA12 e município resolvido (no 2º turno o EA12 estadual só existe para AC, AM, DF, ES, RN e TO).
+- [ ] Diagnóstico EA20 conferido; pré-apuração/0,00% aceita como espera, não erro.
+- [ ] Mapa com selo verde **TSE OFICIAL**; UFs sem publicação em “AGUARDANDO”.
+- [ ] Fotos de Lula e Flávio em cache (`/health.photos.cached >= 2`).
 - [ ] Foto ou silhueta conferida.
 - [ ] URL da saída conferida **pelo IP do servidor**, 1920×1080, sem mexer no endereço.
 - [ ] Transparência sobre câmera e legibilidade em monitor reduzido conferidas.
@@ -29,6 +31,8 @@ Monitore TSE, freshness, última consulta, última alteração, último snapshot
 
 - Mudanças de cargo/abrangência são preparadas no preview e confirmadas com TAKE.
 - Não confunda votos locais para Presidente com resultado nacional; confirme cabeçalho.
+- No 2º turno, cidade/zona e cargos estaduais só existem para AC, AM, DF, ES, RN e TO. Para as demais UFs, use Brasil ou Estado com Presidente; o Studio bloqueia o que não tem fonte.
+- O mapa oficial atualiza uma UF por vez (~54 s por ciclo). Não reinicie o servidor para “forçar” atualização.
 - HOLD congela conteúdo. A sinalização amarela no Studio deve estar claramente visível.
 - Diante de falha TSE, preserve último resultado e informe a equipe editorial. Não substitua por mock.
 - Não aumente polling nem reinicie repetidamente para tentar contornar bloqueio 403/429.

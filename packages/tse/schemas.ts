@@ -60,7 +60,11 @@ export const EA12Schema = z
           ds: z.string(),
           mu: z.array(
             z
-              .object({ cd: z.string().regex(/^\d{5}$/), nm: z.string() })
+              .object({
+                cd: z.string().regex(/^\d{5}$/),
+                nm: z.string(),
+                z: z.array(z.string()).optional(),
+              })
               .passthrough(),
           ),
         })
@@ -72,6 +76,32 @@ export const sectionsSchema = z
   .object({ ts: integer, st: integer, pst: percent, snt: integer })
   .passthrough()
   .refine((s) => s.st + s.snt === s.ts, "Seções inconsistentes");
+export const electorateSchema = z
+  .object({
+    te: integer.optional(),
+    c: integer.optional(),
+    pc: percent.optional(),
+    a: integer.optional(),
+    pa: percent.optional(),
+  })
+  .passthrough();
+export const votesSummarySchema = z
+  .object({
+    tv: integer.optional(),
+    vv: integer.optional(),
+    pvv: percent.optional(),
+    vnom: integer.optional(),
+    pvnom: percent.optional(),
+    vb: integer.optional(),
+    pvb: percent.optional(),
+    vn: integer.optional(),
+    pvn: percent.optional(),
+    van: integer.optional(),
+    pvan: percent.optional(),
+    vansj: integer.optional(),
+    pvansj: percent.optional(),
+  })
+  .passthrough();
 const accompanying = {
   ...metadata,
   ele: digits,
@@ -125,6 +155,8 @@ export const EA20Schema = z
     md: z.enum(["e", "s", "n"]).optional(),
     dv: z.enum(["s", "n"]),
     s: sectionsSchema,
+    e: electorateSchema.optional(),
+    v: votesSummarySchema.optional(),
     carg: z
       .array(
         z

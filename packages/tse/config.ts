@@ -49,7 +49,7 @@ export class ElectionConfigService {
     const p = doc.pl.find(
       (p) =>
         (base.environment === "oficial"
-          ? p.dt === base.date
+          ? p.c === "ele2026"
           : p.cd === base.pleito) &&
         p.e.some(
           (e) =>
@@ -70,6 +70,7 @@ export class ElectionConfigService {
     return {
       ...base,
       cycle: p.c,
+      round: base.round,
       pleito: p.cd,
       date: p.dt,
       federalElectionId: fed,
@@ -86,6 +87,7 @@ export interface Municipality {
   uf: string;
   stateName: string;
   sourceIdg: string;
+  zones?: string[];
 }
 export class MunicipalityService {
   static resolveMunicipality(
@@ -106,6 +108,42 @@ export class MunicipalityService {
       uf: uf.toLowerCase(),
       stateName: state.ds,
       sourceIdg: doc.idg,
+      zones: ((matches[0] as { z?: string[] }).z ?? []).map((z) =>
+        String(z).padStart(4, "0"),
+      ),
+    };
+  }
+  static listMunicipalities(
+    uf: string,
+    input: unknown,
+  ): { code: string; name: string; zones: string[] }[] {
+    const doc = EA12Schema.parse(input);
+    const state = doc.abr.find((a) => a.cd.toLowerCase() === uf.toLowerCase());
+    if (!state) return [];
+    return state.mu
+      .map((m) => ({
+        code: m.cd,
+        name: m.nm,
+        zones: ((m as { z?: string[] }).z ?? []).map((z) =>
+          String(z).padStart(4, "0"),
+        ),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }
+  static resolveByCode(uf: string, code: string, input: unknown): Municipality {
+    const doc = EA12Schema.parse(input);
+    const state = doc.abr.find((a) => a.cd.toLowerCase() === uf.toLowerCase());
+    const match = state?.mu.find((m) => m.cd === code);
+    if (!match || !state) throw new Error("MUNICIPALITY_NOT_FOUND");
+    return {
+      code: match.cd,
+      name: match.nm,
+      uf: uf.toLowerCase(),
+      stateName: state.ds,
+      sourceIdg: doc.idg,
+      zones: ((match as { z?: string[] }).z ?? []).map((z) =>
+        String(z).padStart(4, "0"),
+      ),
     };
   }
 }
@@ -156,17 +194,27 @@ export class TseUrlBuilder {
   }
   ea20(
     office: Office,
-    scope: "municipality" | "state" | "br",
+    scope: "municipality" | "state" | "br" | "zone",
     uf: string,
     municipality?: string,
+    zone?: string,
   ) {
     if (scope === "br" && office !== "0001")
       throw new Error("Cargo não possui resultado Brasil");
     if (!/^[a-z]{2}$/.test(uf)) throw new Error("UF inválida");
-    if (scope === "municipality" && !/^\d{5}$/.test(municipality ?? ""))
+    if (
+      (scope === "municipality" || scope === "zone") &&
+      !/^\d{5}$/.test(municipality ?? "")
+    )
       throw new Error("MUNICIPALITY_NOT_FOUND");
+    if (scope === "zone" && !/^\d{1,4}$/.test(zone ?? ""))
+      throw new Error("ZONE_NOT_FOUND");
     const e = this.election(office),
       area = scope === "br" ? "br" : uf;
+    if (scope === "zone") {
+      const zPadded = (zone ?? "").padStart(4, "0");
+      return `${this.directory("u", e, area)}/${area}${municipality}-z${zPadded}-c${office}-e${e.padStart(6, "0")}-u.json`;
+    }
     return `${this.directory("u", e, area)}/${area}${scope === "municipality" ? municipality : ""}-c${office}-e${e.padStart(6, "0")}-u.json`;
   }
   accompanying(uf: string) {

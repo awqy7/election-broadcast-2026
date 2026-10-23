@@ -21,10 +21,19 @@ import { MockSource, mockConfig, mockMunicipalityDocument } from "./mock";
 import { SnapshotRepository } from "../core/repository";
 import { CandidatePhotoService } from "./photos";
 import { resultKey, type BroadcastState, type ElectionResult } from "../shared";
+import {
+  BRAZIL_STATES_GEO,
+  type BrazilMapOfficialData,
+} from "../shared/brazil-map-data";
 export class TseIngestionService {
   config: ElectionConfig;
   municipality: Municipality | null;
+  municipalitiesList: { code: string; name: string; zones: string[] }[] = [];
   results = new Map<string, ElectionResult>();
+  mapResults = new Map<string, ElectionResult>();
+  mapErrors = new Map<string, string>();
+  mapUpdatedAt: string | null = null;
+  stateElectionAvailable = true;
   mock = new MockSource();
   photos: CandidatePhotoService;
   lastError: string | null = null;
@@ -41,6 +50,11 @@ export class TseIngestionService {
     string,
     { at: number; data: ReturnType<typeof EA15Schema.parse> }
   >();
+  private mapTimer: NodeJS.Timeout | undefined;
+  private mapIndex = 0;
+  private mapBusy = false;
+  private readonly mapIntervalMs: number;
+  private readonly requestedRound: "1" | "2";
   constructor(
     public mode: "mock" | "tse" | "tse-sim",
     public repo: SnapshotRepository,
@@ -50,11 +64,15 @@ export class TseIngestionService {
       uf: string;
       municipalityName: string;
       interval: number;
+      mapInterval?: number;
+      round?: "1" | "2";
       photoDirectory: string;
     },
     private active: () => BroadcastState[],
     private changed: () => void,
   ) {
+    this.mapIntervalMs = options.mapInterval ?? 2000;
+    this.requestedRound = options.round ?? "1";
     this.config = repo.get<ElectionConfig>("electionConfig") ?? {
       ...(this.mode === "tse-sim"
         ? simulationElectionConfig
@@ -62,12 +80,24 @@ export class TseIngestionService {
       host: options.host,
     };
     this.config.host = options.host;
+    if (mode === "tse" && this.config.round !== this.requestedRound) {
+      this.config = {
+        ...this.config,
+        round: this.requestedRound,
+        validated: false,
+      };
+    }
     this.municipality = repo.get("municipality");
+    this.municipalitiesList = repo.get("municipalitiesList") ?? [];
     if (mode === "mock") {
       this.config = mockConfig;
       this.municipality = MunicipalityService.resolveMunicipality(
         "mg",
         "Teófilo Otoni",
+        mockMunicipalityDocument,
+      );
+      this.municipalitiesList = MunicipalityService.listMunicipalities(
+        "mg",
         mockMunicipalityDocument,
       );
     }
@@ -81,13 +111,45 @@ export class TseIngestionService {
             : "mock")
       )
         throw new Error("Banco incompatível com DATA_MODE");
+      if (value.scopeType === "uf") {
+        if (value.officeCode === "0001") {
+          const mapKey = `${value.electionId}:${value.scopeCode.toLowerCase()}`;
+          const previous = this.mapResults.get(mapKey);
+          if (
+            !previous ||
+            Date.parse(value.receivedAt) >= Date.parse(previous.receivedAt)
+          )
+            this.mapResults.set(mapKey, value);
+        }
+        if (value.scopeCode.toLowerCase() === this.options.uf.toLowerCase()) {
+          const key = `state:${value.officeCode}`;
+          const previous = this.results.get(key);
+          if (
+            !previous ||
+            Date.parse(value.receivedAt) >= Date.parse(previous.receivedAt)
+          )
+            this.results.set(key, value);
+        }
+        continue;
+      }
       const scope =
         value.scopeType === "mu"
           ? "municipality"
-          : value.scopeType === "uf"
-            ? "state"
+          : value.scopeType === "zona"
+            ? "zone"
             : "br";
       this.results.set(`${scope}:${value.officeCode}`, value);
+      if (value.scopeType === "mu") {
+        this.results.set(
+          `municipality:${value.scopeCode}:${value.officeCode}`,
+          value,
+        );
+      } else if (value.scopeType === "zona") {
+        const mu = value.municipalityCode ?? "default";
+        const zone = value.zoneCode ?? value.scopeCode ?? "default";
+        this.results.set(`zone:${mu}:${zone}:${value.officeCode}`, value);
+        this.results.set(`zone:default:${zone}:${value.officeCode}`, value);
+      }
     }
     this.lastResultChangedAt =
       [...this.results.values()]
@@ -120,22 +182,46 @@ export class TseIngestionService {
   }
   async configure() {
     const { data } = await this.http.json(this.urls().ea11(), EA11Schema);
+    const previousFederalElectionId = this.config.federalElectionId;
     this.config = ElectionConfigService.fromEA11(data, {
       ...(this.mode === "tse-sim"
         ? simulationElectionConfig
         : initialElectionConfig),
       host: this.options.host,
+      round: this.mode === "tse-sim" ? "1" : this.requestedRound,
     });
+    if (previousFederalElectionId !== this.config.federalElectionId) {
+      this.results.clear();
+      this.lastResultSuccessAt = null;
+      this.lastResultChangedAt = null;
+      this.mapErrors.clear();
+      this.mapIndex = 0;
+    }
     this.repo.set("electionConfig", this.config);
     const municipalities = await this.http.json(this.urls().ea12(), EA12Schema);
     if (municipalities.data.f !== (this.mode === "tse" ? "o" : "s"))
       throw new Error("TSE_SCHEMA_INVALID: EA12 não oficial");
-    this.municipality = MunicipalityService.resolveMunicipality(
-      this.options.uf,
-      this.options.municipalityName,
-      municipalities.data,
+    const ufHasStateElection = municipalities.data.abr.some(
+      (a) => a.cd.toLowerCase() === this.options.uf.toLowerCase(),
     );
-    this.repo.set("municipality", this.municipality);
+    if (this.config.round === "2" && !ufHasStateElection) {
+      this.stateElectionAvailable = false;
+      this.municipalitiesList =
+        this.repo.get("municipalitiesList") ?? this.municipalitiesList;
+    } else {
+      this.stateElectionAvailable = true;
+      this.municipality = MunicipalityService.resolveMunicipality(
+        this.options.uf,
+        this.options.municipalityName,
+        municipalities.data,
+      );
+      this.repo.set("municipality", this.municipality);
+      this.municipalitiesList = MunicipalityService.listMunicipalities(
+        this.options.uf,
+        municipalities.data,
+      );
+      this.repo.set("municipalitiesList", this.municipalitiesList);
+    }
     this.configuredAt = Date.now();
   }
   async start() {
@@ -154,11 +240,116 @@ export class TseIngestionService {
   stop() {
     this.stopped = true;
     clearTimeout(this.timer);
+    clearTimeout(this.mapTimer);
+    this.mapTimer = undefined;
   }
   async close() {
     this.stop();
     while (this.busy) await new Promise((resolve) => setTimeout(resolve, 50));
     await this.photos.close();
+  }
+
+  mapSnapshot(): BrazilMapOfficialData | null {
+    if (this.mode !== "tse") return null;
+    if (!this.config.validated) return { states: {}, updatedAt: null };
+    const states: BrazilMapOfficialData["states"] = {};
+    let updatedAt: string | null = null;
+    for (const result of this.mapResults.values()) {
+      if (
+        result.officeCode !== "0001" ||
+        result.electionId !== this.config.federalElectionId
+      )
+        continue;
+      const sigla = result.scopeCode.toUpperCase();
+      const c22 = result.candidates.find((c) => c.number === "22");
+      const c13 = result.candidates.find((c) => c.number === "13");
+      const visible = result.disclosureAllowed;
+      const votes22 = visible ? (c22?.votes ?? 0) : 0;
+      const votes13 = visible ? (c13?.votes ?? 0) : 0;
+      const percent22 = visible ? (c22?.percentage ?? 0) : 0;
+      const percent13 = visible ? (c13?.percentage ?? 0) : 0;
+      states[sigla] = {
+        uf: sigla,
+        votes22,
+        votes13,
+        percent22,
+        percent13,
+        sectionsPercent: result.percentageSectionsTotalized,
+        final: result.final,
+        validVotes: result.stats?.validVotes ?? votes22 + votes13,
+        receivedAt: result.receivedAt,
+        sourceGeneratedAt: result.sourceGeneratedAt,
+      };
+      if (!updatedAt || result.receivedAt > updatedAt)
+        updatedAt = result.receivedAt;
+    }
+    return { states, updatedAt };
+  }
+
+  mapStatus() {
+    const map = this.mapSnapshot();
+    return {
+      official: this.mode === "tse",
+      loaded: map ? Object.keys(map.states).length : 0,
+      total: Object.keys(BRAZIL_STATES_GEO).length,
+      updatedAt: map?.updatedAt ?? null,
+      round: this.config.round,
+      stateElectionAvailable: this.stateElectionAvailable,
+      electionId: this.config.federalElectionId,
+      interval: this.mapIntervalMs,
+      errors: Object.fromEntries(this.mapErrors),
+    };
+  }
+
+  private startMapPolling() {
+    if (this.mode !== "tse" || this.mapTimer || this.stopped) return;
+    const ufs = Object.keys(BRAZIL_STATES_GEO);
+    const tick = async () => {
+      if (this.stopped) return;
+      const sigla = ufs[this.mapIndex % ufs.length];
+      this.mapIndex++;
+      if (!this.mapBusy) {
+        this.mapBusy = true;
+        try {
+          await this.ingestMapState(sigla);
+        } catch (e) {
+          this.mapErrors.set(sigla, String(e).slice(0, 300));
+        } finally {
+          this.mapBusy = false;
+        }
+      }
+      if (!this.stopped)
+        this.mapTimer = setTimeout(
+          () => void tick(),
+          this.mapIntervalMs * (1 + Math.random() * 0.1),
+        );
+    };
+    this.mapTimer = setTimeout(() => void tick(), 0);
+  }
+
+  private async ingestMapState(sigla: string) {
+    const uf = sigla.toLowerCase();
+    const resource = this.urls().ea20("0001", "state", uf);
+    const response = await this.http.json(resource, EA20Schema);
+    const result = ResultNormalizer.normalize(response.data, {
+      office: "0001",
+      scopeType: "uf",
+      scopeCode: uf,
+      scopeName: BRAZIL_STATES_GEO[sigla]?.name ?? sigla,
+      electionId: this.urls().election("0001"),
+      round: this.config.round,
+      mode: this.mode,
+      resource,
+    });
+    const key = `${result.electionId}:${uf}`;
+    const previous = this.mapResults.get(key);
+    this.mapResults.set(key, result);
+    const changed = this.repo.save(result, response.data);
+    if (changed || !previous) {
+      this.mapErrors.delete(sigla);
+      this.mapUpdatedAt = result.receivedAt;
+      this.changed();
+    }
   }
   async poll() {
     if (this.busy) return;
@@ -166,6 +357,7 @@ export class TseIngestionService {
     try {
       if (this.mode !== "mock" && Date.now() - this.configuredAt > 3600000)
         await this.configure();
+      if (this.mode === "tse" && this.config.validated) this.startMapPolling();
       for (const state of this.active()) {
         try {
           await this.ingest(state);
@@ -200,33 +392,62 @@ export class TseIngestionService {
     let raw: unknown;
     let resource: string;
     const scopeType =
-      state.scope === "br" ? "br" : state.scope === "state" ? "uf" : "mu";
+      state.scope === "br"
+        ? "br"
+        : state.scope === "state"
+          ? "uf"
+          : state.scope === "zone"
+            ? "zona"
+            : "mu";
+    const targetMuCode = state.municipalityCode || this.municipality?.code;
+    const targetMu = targetMuCode
+      ? (this.municipalitiesList.find((m) => m.code === targetMuCode) ??
+        (targetMuCode === this.municipality?.code ? this.municipality : null))
+      : this.municipality;
+    const targetZone =
+      state.scope === "zone"
+        ? state.zoneCode || targetMu?.zones?.[0] || "0001"
+        : undefined;
     const code =
       state.scope === "br"
         ? "br"
         : state.scope === "state"
           ? this.options.uf
-          : this.municipality?.code;
+          : state.scope === "zone"
+            ? (targetZone ?? "0001")
+            : (targetMu?.code ?? targetMuCode);
+    const muName = targetMu?.name ?? this.options.municipalityName;
     const scopeName =
       state.scope === "br"
         ? "Brasil"
         : state.scope === "state"
           ? (this.municipality?.stateName ?? this.options.uf.toUpperCase())
-          : `${this.municipality?.name ?? this.options.municipalityName} • ${this.options.uf.toUpperCase()}`;
+          : state.scope === "zone"
+            ? `${muName} • ZONA ${code} • ${this.options.uf.toUpperCase()}`
+            : `${muName} • ${this.options.uf.toUpperCase()}`;
     if (!code) throw new Error("MUNICIPALITY_NOT_FOUND");
     if (this.mode === "mock") {
-      raw = this.mock.document(state.officeCode, state.scope);
+      raw = this.mock.document(
+        state.officeCode,
+        state.scope,
+        targetMuCode ?? undefined,
+        targetZone,
+      );
       resource = `mock://${key}`;
     } else {
       resource = this.urls().ea20(
         state.officeCode,
         state.scope,
         this.options.uf,
-        this.municipality?.code,
+        targetMuCode ?? undefined,
+        targetZone,
       );
       if (!force && state.officeCode !== "0001" && this.results.has(key)) {
         try {
-          const area = state.scope === "municipality" ? this.options.uf : "br";
+          const area =
+            state.scope === "municipality" || state.scope === "zone"
+              ? this.options.uf
+              : "br";
           const url = this.urls().accompanying(area);
           let tracked = this.trackingCache.get(url);
           if (!tracked || Date.now() - tracked.at > this.options.interval) {
@@ -242,8 +463,10 @@ export class TseIngestionService {
             tracked = { at: Date.now(), data: response.data };
             this.trackingCache.set(url, tracked);
           }
+          const checkCode =
+            state.scope === "zone" ? (targetMuCode ?? code) : code;
           const entry = tracked.data.abr.find(
-            (a) => a.cdabr.toLowerCase() === code.toLowerCase(),
+            (a) => a.cdabr.toLowerCase() === checkCode.toLowerCase(),
           );
           const signature = entry
             ? `${entry.dt}:${entry.ht}:${entry.s.st}`
@@ -276,6 +499,8 @@ export class TseIngestionService {
       round: this.config.round,
       mode: this.mode,
       resource,
+      municipalityCode: targetMuCode ?? null,
+      zoneCode: targetZone ?? null,
     });
     result.candidates = result.candidates.map((c) => ({
       ...c,

@@ -73,8 +73,21 @@ os dados. Nao publique a pasta do programa na internet.
   TOP          mostra os mais votados
   INDIVIDUAL   um candidato
   COMPARAR     dois, tres ou quatro candidatos
+  TELA CHEIA   mapa do Brasil ou duelo
   APURACAO     percentual das secoes
   TICKER       texto rodando
+
+MAPA OFICIAL
+  Abra TELA CHEIA com abrangencia BRASIL e cargo PRESIDENTE.
+  O mapa carrega as 27 UFs direto do TSE, uma por vez, e mostra
+  o selo verde TSE OFICIAL. Estado ainda sem publicacao fica
+  cinza com AGUARDANDO; isso e espera, nao erro.
+
+2o TURNO (25/10/2026)
+  Para Presidente, o mapa e os votos por estado valem para todo
+  o Brasil. Cidade, zona e cargos estaduais so existem para
+  AC, AM, DF, ES, RN e TO, que tem disputa de governo.
+  Nas demais UFs use BRASIL ou ESTADO com o cargo PRESIDENTE.
 
 Como colocar no ar:
 
@@ -100,7 +113,9 @@ aba do navegador. É so um atalho: nao muda nada.
   - Teste no modo ENSAIO ate se sentir seguro
   - Confira se o painel mostra OFICIAL, sem aviso de simulacao
   - Abra o painel tecnico e rode o diagnostico
-  - Confira o cache de fotos do cargo que vai usar
+  - Confira o cache de fotos do cargo que vai usar (no 2o turno,
+    Lula e Flavio devem aparecer com foto real)
+  - Confira /health: round 2, mapa 27/27 e sem erro TSE
   - Teste TAKE, CLEAR e HOLD com a transmissao monitorada
   - Combine um plano de internet de reserva: se a internet cair,
     a saida some junto

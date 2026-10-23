@@ -62,11 +62,28 @@ export interface CandidateResult {
     sqcand: string;
   }[];
 }
+export interface ElectionStats {
+  electorateTotal: number;
+  turnout: number;
+  turnoutPercent: number;
+  abstention: number;
+  abstentionPercent: number;
+  totalVotes: number;
+  validVotes: number;
+  validPercent: number;
+  nominalVotes: number;
+  blankVotes: number;
+  blankPercent: number;
+  nullVotes: number;
+  nullPercent: number;
+  annulledVotes: number;
+  subjudiceVotes: number;
+}
 export interface ElectionResult {
   source: "TSE" | "SIMULAÇÃO";
   environment: "oficial" | "mock" | "simulado2026";
   electionId: string;
-  scopeType: "br" | "uf" | "mu";
+  scopeType: "br" | "uf" | "mu" | "zona";
   scopeCode: string;
   scopeName: string;
   officeCode: Office;
@@ -87,6 +104,9 @@ export interface ElectionResult {
   sourceGeneratedAt: string;
   receivedAt: string;
   hash: string;
+  municipalityCode?: string | null;
+  zoneCode?: string | null;
+  stats?: ElectionStats;
 }
 export const sortCandidates = (c: CandidateResult[]) =>
   [...c].sort(
@@ -98,9 +118,21 @@ export const sortCandidates = (c: CandidateResult[]) =>
 export const stateSchema = z
   .object({
     scene: z
-      .enum(["top", "candidate", "compare", "progress", "ticker"])
+      .enum([
+        "top",
+        "candidate",
+        "compare",
+        "progress",
+        "ticker",
+        "stats",
+        "runoff",
+        "fullscreen",
+        "projection",
+      ])
       .default("top"),
-    scope: z.enum(["municipality", "state", "br"]).default("municipality"),
+    scope: z
+      .enum(["municipality", "state", "br", "zone"])
+      .default("municipality"),
     officeCode: officeSchema.default("0003"),
     selectedCandidateIds: z.array(z.string().max(40)).max(4).default([]),
     topCount: z.number().int().min(2).max(6).default(4),
@@ -112,6 +144,7 @@ export const stateSchema = z
         "bottom-left",
         "bottom-center",
         "bottom-right",
+        "fullscreen",
       ])
       .default("bottom-center"),
     theme: z.literal("broadcast").default("broadcast"),
@@ -122,7 +155,22 @@ export const stateSchema = z
     showVotes: z.boolean().default(true),
     showPhoto: z.boolean().default(true),
     showTimestamp: z.boolean().default(true),
+    showVice: z.boolean().default(true),
+    showStats: z.boolean().default(true),
+    showEffects: z.boolean().default(true),
     safeArea: z.number().min(0).max(180).default(60),
+    municipalityCode: z
+      .string()
+      .regex(/^\d{5}$/)
+      .nullable()
+      .default(null),
+    zoneCode: z
+      .string()
+      .regex(/^\d{1,4}$/)
+      .nullable()
+      .default(null),
+    fullscreenTab: z.enum(["map", "duel"]).default("map"),
+    focusedUf: z.string().max(2).nullable().default(null),
     revision: z.number().int().nonnegative().default(0),
     updatedAt: z.string().default(() => new Date().toISOString()),
   })
@@ -150,9 +198,22 @@ export interface Output {
   settings: Settings;
   dataMode: "mock" | "tse" | "tse-sim";
   sequence: number;
+  map?: import("./brazil-map-data").BrazilMapOfficialData | null;
 }
-export const resultKey = (s: Pick<BroadcastState, "scope" | "officeCode">) =>
-  `${s.scope}:${s.officeCode}`;
+export const resultKey = (
+  s: Pick<BroadcastState, "scope" | "officeCode"> & {
+    municipalityCode?: string | null;
+    zoneCode?: string | null;
+  },
+) => {
+  if (s.scope === "zone") {
+    return `zone:${s.municipalityCode ?? "default"}:${s.zoneCode ?? "default"}:${s.officeCode}`;
+  }
+  if (s.scope === "municipality" && s.municipalityCode) {
+    return `municipality:${s.municipalityCode}:${s.officeCode}`;
+  }
+  return `${s.scope}:${s.officeCode}`;
+};
 export function reduceState(
   previous: BroadcastState,
   patch: unknown,
@@ -163,7 +224,10 @@ export function reduceState(
     throw new Error("Brasil permite apenas Presidente");
   if (
     (p.officeCode && p.officeCode !== previous.officeCode) ||
-    (p.scope && p.scope !== previous.scope)
+    (p.scope && p.scope !== previous.scope) ||
+    (p.municipalityCode !== undefined &&
+      p.municipalityCode !== previous.municipalityCode) ||
+    (p.zoneCode !== undefined && p.zoneCode !== previous.zoneCode)
   )
     next.selectedCandidateIds = [];
   if (p.scene === "candidate")
@@ -185,3 +249,244 @@ export const ERROR_MESSAGES: Record<string, string> = {
   DATABASE_ERROR: "Falha no banco de dados.",
   SSE_DISCONNECTED: "Conexão interrompida; reconectando.",
 };
+
+export interface RunoffProjection {
+  hasRunoff: boolean;
+  leader: CandidateResult | null;
+  runnerUp: CandidateResult | null;
+  marginVotes: number;
+  marginPercent: number;
+  totalValidVotes: number;
+  estimatedRemainingVotes: number;
+  votesToSealVictory: number;
+  isMathematicallyElected: boolean;
+  statusLabel: string;
+}
+
+export function calculateRunoffProjection(
+  result: ElectionResult | null,
+): RunoffProjection {
+  if (!result || !result.candidates || result.candidates.length < 2) {
+    return {
+      hasRunoff: false,
+      leader: result?.candidates?.[0] ?? null,
+      runnerUp: null,
+      marginVotes: 0,
+      marginPercent: 0,
+      totalValidVotes: 0,
+      estimatedRemainingVotes: 0,
+      votesToSealVictory: 0,
+      isMathematicallyElected: false,
+      statusLabel: "AGUARDANDO DADOS",
+    };
+  }
+
+  const sorted = sortCandidates(result.candidates);
+  const leader = sorted[0];
+  const runnerUp = sorted[1];
+  const marginVotes = Math.max(0, leader.votes - runnerUp.votes);
+  const marginPercent = Math.max(0, leader.percentage - runnerUp.percentage);
+
+  const countedValid =
+    result.stats?.validVotes ||
+    sorted.reduce((sum, c) => sum + (c.votes || 0), 0) ||
+    1;
+
+  let estimatedRemainingVotes = 0;
+  if (
+    result.sectionsTotal > 0 &&
+    result.sectionsTotalized > 0 &&
+    result.sectionsTotalized < result.sectionsTotal
+  ) {
+    const avgValidPerSection = countedValid / result.sectionsTotalized;
+    const remainingSections = result.sectionsTotal - result.sectionsTotalized;
+    estimatedRemainingVotes = Math.round(
+      remainingSections * avgValidPerSection,
+    );
+  } else if (
+    result.stats &&
+    result.stats.electorateTotal > 0 &&
+    result.stats.turnout > 0
+  ) {
+    const estimatedTotalValid = Math.round(
+      result.stats.electorateTotal *
+        (result.stats.turnoutPercent / 100) *
+        (result.stats.validPercent / 100),
+    );
+    estimatedRemainingVotes = Math.max(0, estimatedTotalValid - countedValid);
+  }
+
+  const officialDeclared =
+    result.mathematicallyDefined === "s" ||
+    leader.officialStatus === "Eleito" ||
+    leader.electedFlag === "s";
+  const mathGuaranteed =
+    result.sectionsTotalized > 0 &&
+    (estimatedRemainingVotes === 0
+      ? leader.votes > runnerUp.votes
+      : leader.votes > runnerUp.votes + estimatedRemainingVotes);
+  const isMathematicallyElected = officialDeclared || mathGuaranteed;
+
+  let votesToSealVictory = 0;
+  if (!isMathematicallyElected && estimatedRemainingVotes > 0) {
+    votesToSealVictory = Math.max(
+      0,
+      Math.ceil((runnerUp.votes + estimatedRemainingVotes - leader.votes) / 2) +
+        1,
+    );
+  }
+
+  let statusLabel = "EM APURAÇÃO";
+  if (isMathematicallyElected) {
+    statusLabel =
+      leader.officialStatus === "Eleito" ? "ELEITO" : "MATEMATICAMENTE ELEITO";
+  } else if (result.percentageSectionsTotalized > 0) {
+    statusLabel = "VIRADA POSSÍVEL";
+  }
+
+  return {
+    hasRunoff: true,
+    leader,
+    runnerUp,
+    marginVotes,
+    marginPercent,
+    totalValidVotes: countedValid,
+    estimatedRemainingVotes,
+    votesToSealVictory,
+    isMathematicallyElected,
+    statusLabel,
+  };
+}
+
+export interface PartySeatsProjection {
+  partyAcronym: string;
+  partyName: string;
+  totalVotes: number;
+  percentage: number;
+  initialSeats: number;
+  leftoverSeats: number;
+  totalSeats: number;
+  electedCandidates: CandidateResult[];
+}
+
+export interface SeatsProjection {
+  totalValidVotes: number;
+  totalSeats: number;
+  electoralQuotient: number;
+  parties: PartySeatsProjection[];
+}
+
+export function calculateSeatsProjection(
+  result: ElectionResult | null,
+  totalSeats = 77,
+): SeatsProjection {
+  if (!result || !result.candidates || result.candidates.length === 0) {
+    return {
+      totalValidVotes: 0,
+      totalSeats,
+      electoralQuotient: 0,
+      parties: [],
+    };
+  }
+
+  const validVotes =
+    result.stats?.validVotes ||
+    result.candidates.reduce((sum, c) => sum + (c.votes || 0), 0) ||
+    1;
+
+  const rawQe = validVotes / totalSeats;
+  const qeDec = rawQe - Math.floor(rawQe);
+  const qe = qeDec > 0.5 ? Math.ceil(rawQe) : Math.max(1, Math.floor(rawQe));
+
+  const partyMap = new Map<
+    string,
+    {
+      partyAcronym: string;
+      partyName: string;
+      candidates: CandidateResult[];
+      totalVotes: number;
+    }
+  >();
+
+  for (const cand of result.candidates) {
+    const acronym = cand.partyAcronym || "IND";
+    let entry = partyMap.get(acronym);
+    if (!entry) {
+      entry = {
+        partyAcronym: acronym,
+        partyName: cand.partyName || acronym,
+        candidates: [],
+        totalVotes: 0,
+      };
+      partyMap.set(acronym, entry);
+    }
+    entry.candidates.push(cand);
+    entry.totalVotes += cand.votes;
+  }
+
+  const partyList = Array.from(partyMap.values()).map((p) => {
+    p.candidates.sort((a, b) => b.votes - a.votes);
+    const initialSeats = Math.floor(p.totalVotes / qe);
+    return {
+      partyAcronym: p.partyAcronym,
+      partyName: p.partyName,
+      totalVotes: p.totalVotes,
+      percentage: (p.totalVotes / validVotes) * 100,
+      initialSeats,
+      leftoverSeats: 0,
+      totalSeats: initialSeats,
+      allCandidates: p.candidates,
+      electedCandidates: [] as CandidateResult[],
+    };
+  });
+
+  const allocatedSeats = partyList.reduce((acc, p) => acc + p.initialSeats, 0);
+  const seatsToDistribute = Math.max(0, totalSeats - allocatedSeats);
+
+  for (let i = 0; i < seatsToDistribute; i++) {
+    let bestAverage = -1;
+    let bestPartyIndex = -1;
+
+    for (let j = 0; j < partyList.length; j++) {
+      const p = partyList[j];
+      const avg = p.totalVotes / (p.totalSeats + 1);
+      if (avg > bestAverage) {
+        bestAverage = avg;
+        bestPartyIndex = j;
+      }
+    }
+
+    if (bestPartyIndex >= 0) {
+      partyList[bestPartyIndex].leftoverSeats++;
+      partyList[bestPartyIndex].totalSeats++;
+    } else {
+      break;
+    }
+  }
+
+  for (const p of partyList) {
+    p.electedCandidates = p.allCandidates.slice(0, p.totalSeats);
+  }
+
+  partyList.sort(
+    (a, b) => b.totalSeats - a.totalSeats || b.totalVotes - a.totalVotes,
+  );
+
+  return {
+    totalValidVotes: validVotes,
+    totalSeats,
+    electoralQuotient: qe,
+    parties: partyList.map((p) => ({
+      partyAcronym: p.partyAcronym,
+      partyName: p.partyName,
+      totalVotes: p.totalVotes,
+      percentage: p.percentage,
+      initialSeats: p.initialSeats,
+      leftoverSeats: p.leftoverSeats,
+      totalSeats: p.totalSeats,
+      electedCandidates: p.electedCandidates,
+    })),
+  };
+}
+
+export * from "./brazil-map-data";

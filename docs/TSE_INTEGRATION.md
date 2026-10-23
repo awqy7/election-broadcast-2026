@@ -1,6 +1,6 @@
 # Integração TSE 2026
 
-Fontes oficiais consultadas em 03/10/2026:
+Fontes oficiais consultadas em 22/10/2026:
 
 - [Portal técnico 2026 e FAQ](https://www.tse.jus.br/eleicoes/informacoes-tecnicas-sobre-a-divulgacao-de-resultados)
 - [Documentos EA11, EA12, EA14, EA15, EA20 e instruções](https://www.tse.jus.br/eleicoes/eleicoes-2026-content/arquivos/divulgacao-de-resultados)
@@ -12,10 +12,11 @@ As evidências JSON de `specs` vieram dos endpoints oficiais e servem para teste
 ## Descoberta
 
 1. EA11 é obtido em `/oficial/comum/config/ele-c.json`.
-2. Seleciona-se pleito pela data `04/10/2026`, turno 1 e presença dos cargos esperados. Ciclo, pleito e eleições vêm do documento; confirmação capturada: `ele2026`, `3220`, federal `6257`, estadual `6259`, conselho `6261`.
+2. Seleciona-se o ciclo `ele2026`, o turno configurado em `TSE_ROUND` e a presença do cargo 1. Datas, pleito e eleições vêm do documento; 1º turno: `3220`, federal `6257`, estadual `6259`; 2º turno: `3221` (25/10/2026), federal `6258`, estadual `6260`.
 3. `arq[].dir` determina diretórios para `cm`, `u`, `ab`, `ft`. Tokens resolvidos só podem apontar para HTTPS no host TSE configurado.
-4. EA12 `mun-e006259-cm.json` fornece municípios. A comparação normaliza acentos, caixa e espaços. O código encontrado para Teófilo Otoni é persistido com nome, UF e IDG; não existe código de produção embutido no resolvedor.
+4. EA12 `mun-e00<estadual>-cm.json` fornece municípios. A comparação normaliza acentos, caixa e espaços. O código encontrado para Teófilo Otoni é persistido com nome, UF e IDG; não existe código de produção embutido no resolvedor. No 2º turno o EA12 estadual só publica as UFs com disputa de governo (AC, AM, DF, ES, RN e TO); se a UF padrão não estiver lá, o sistema mantém o município em cache e segue com o mapa nacional, sem inventar cidade.
 5. EA20 usa o código descoberto, cargo com quatro dígitos e eleição com seis dígitos no nome do arquivo. A pasta da eleição usa o identificador fornecido pelo EA11.
+6. O mapa oficial consulta os 27 EA20 estaduais de Presidente (`<uf>/<uf>-c0001-e006258-u.json`), um por vez a cada `TSE_MAP_POLL_INTERVAL_MS` (padrão 2000 ms). O resultado é mantido em memória separada do resultado do cargo; UFs ausentes ficam neutras, nunca com dados sintéticos. Não há detalhamento municipal de Presidente nessa fonte.
 
 ## Dados e semântica
 
@@ -39,7 +40,7 @@ Cada resultado carrega sourceResource, sourceIdg, sourceGeneratedAt, receivedAt 
 
 ## Validação eleitoral ainda necessária
 
-O arquivo oficial capturado está em pré-apuração. Isso valida contrato e conectividade, não antecipa validação de situações que só aparecerão durante a totalização. Os cenários de mudança de liderança, parcial, anulação, substituição e segundo turno são exercitados pelo modo mock. Verifique o diagnóstico oficial novamente antes da transmissão e monitore eventuais mudanças de leiaute anunciadas pelo TSE.
+O 2º turno já está publicado em pré-apuração (0,00%) para Presidente (`6258`) e para as UFs com disputa de governo. Isso valida contrato, fotos e conectividade; a totalização real só aparece no dia. O mapa carrega as 27 UFs e o selo TSE OFICIAL; ausência de votos é exibida como “AGUARDANDO”, não como zero inventado. Os cenários de mudança de liderança, parcial, anulação e substituição continuam exercitados pelo modo mock. Verifique o diagnóstico oficial novamente antes da transmissão e monitore eventuais mudanças de leiaute anunciadas pelo TSE.
 
 ## Ambiente de testes TSE 2026
 

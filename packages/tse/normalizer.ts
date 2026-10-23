@@ -30,13 +30,15 @@ export class ResultNormalizer {
     input: unknown,
     context: {
       office: Office;
-      scopeType: "br" | "uf" | "mu";
+      scopeType: "br" | "uf" | "mu" | "zona";
       scopeCode: string;
       scopeName: string;
       electionId: string;
       round: string;
       mode: "mock" | "tse" | "tse-sim";
       resource: string;
+      municipalityCode?: string | null;
+      zoneCode?: string | null;
     },
   ): ElectionResult {
     const d = EA20Schema.parse(input);
@@ -78,6 +80,26 @@ export class ResultNormalizer {
       throw new Error("TSE_SCHEMA_INVALID: candidato duplicado");
     const generatedAt = tseDate(d.dg, d.hg);
     if (!generatedAt) throw new Error("TSE_SCHEMA_INVALID: geração ausente");
+    const stats =
+      d.e || d.v
+        ? {
+            electorateTotal: d.e?.te ?? 0,
+            turnout: d.e?.c ?? 0,
+            turnoutPercent: d.e?.pc ?? 0,
+            abstention: d.e?.a ?? 0,
+            abstentionPercent: d.e?.pa ?? 0,
+            totalVotes: d.v?.tv ?? 0,
+            validVotes: d.v?.vv ?? 0,
+            validPercent: d.v?.pvv ?? 0,
+            nominalVotes: d.v?.vnom ?? 0,
+            blankVotes: d.v?.vb ?? 0,
+            blankPercent: d.v?.pvb ?? 0,
+            nullVotes: d.v?.vn ?? 0,
+            nullPercent: d.v?.pvn ?? 0,
+            annulledVotes: d.v?.van ?? 0,
+            subjudiceVotes: d.v?.vansj ?? 0,
+          }
+        : undefined;
     return {
       source: context.mode === "mock" ? "SIMULAÇÃO" : "TSE",
       environment:
@@ -108,6 +130,9 @@ export class ResultNormalizer {
       sourceGeneratedAt: generatedAt,
       receivedAt: new Date().toISOString(),
       hash: hash(input),
+      municipalityCode: context.municipalityCode ?? null,
+      zoneCode: context.zoneCode ?? null,
+      stats,
     };
   }
 }
