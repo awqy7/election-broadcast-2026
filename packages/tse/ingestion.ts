@@ -194,6 +194,7 @@ export class TseIngestionService {
       this.results.clear();
       this.lastResultSuccessAt = null;
       this.lastResultChangedAt = null;
+      this.mapResults.clear();
       this.mapErrors.clear();
       this.mapIndex = 0;
     }
@@ -245,12 +246,13 @@ export class TseIngestionService {
   }
   async close() {
     this.stop();
-    while (this.busy) await new Promise((resolve) => setTimeout(resolve, 50));
+    while (this.busy || this.mapBusy)
+      await new Promise((resolve) => setTimeout(resolve, 50));
     await this.photos.close();
   }
 
   mapSnapshot(): BrazilMapOfficialData | null {
-    if (this.mode !== "tse") return null;
+    if (this.mode !== "tse" || this.config.round !== "2") return null;
     if (!this.config.validated) return { states: {}, updatedAt: null };
     const states: BrazilMapOfficialData["states"] = {};
     let updatedAt: string | null = null;
@@ -302,7 +304,13 @@ export class TseIngestionService {
   }
 
   private startMapPolling() {
-    if (this.mode !== "tse" || this.mapTimer || this.stopped) return;
+    if (
+      this.mode !== "tse" ||
+      this.config.round !== "2" ||
+      this.mapTimer ||
+      this.stopped
+    )
+      return;
     const ufs = Object.keys(BRAZIL_STATES_GEO);
     const tick = async () => {
       if (this.stopped) return;
@@ -345,11 +353,9 @@ export class TseIngestionService {
     const previous = this.mapResults.get(key);
     this.mapResults.set(key, result);
     const changed = this.repo.save(result, response.data);
-    if (changed || !previous) {
-      this.mapErrors.delete(sigla);
-      this.mapUpdatedAt = result.receivedAt;
-      this.changed();
-    }
+    this.mapErrors.delete(sigla);
+    this.mapUpdatedAt = result.receivedAt;
+    if (changed || !previous) this.changed();
   }
   async poll() {
     if (this.busy) return;

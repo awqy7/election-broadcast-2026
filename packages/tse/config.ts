@@ -159,9 +159,9 @@ export class TseUrlBuilder {
     return `https://${this.config.host}${this.config.basePath ?? ""}/${this.config.environment}/comum/config/ele-c.json`;
   }
   election(office: Office) {
-    return office === "0001"
-      ? this.config.federalElectionId
-      : this.config.stateElectionId;
+    if (office === "0001") return this.config.federalElectionId;
+    if (office === "0008") return this.config.districtElectionId;
+    return this.config.stateElectionId;
   }
   private directory(tp: string, election: string, uf = "br") {
     if (!this.config.validated) throw new Error("EA11 não validado");

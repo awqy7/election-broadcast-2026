@@ -116,6 +116,44 @@ test("Studio → TAKE → SSE → cenas, HOLD, busca, CLEAR e reconexão", async
   await page.getByRole("button", { name: "CLEAR RETIRAR" }).click();
   await expect(output.locator(".broadcast-module")).toHaveCount(0);
 });
+test("governador no 2º turno mantém os nomes reais do mock", async ({
+  page,
+  context,
+}) => {
+  await login(page);
+  await command(page, "/api/mock", { action: "reset" });
+  await command(page, "/api/mock", { action: "online" });
+  await command(page, "/api/mock", { action: "progress:100" });
+  await command(page, "/api/mock", { action: "runoff" });
+  await command(page, "/api/preview", {
+    scene: "top",
+    scope: "state",
+    officeCode: "0003",
+    selectedCandidateIds: [],
+    topCount: 2,
+  });
+  await command(page, "/api/broadcast/take", {});
+  const output = await context.newPage();
+  await output.goto("/overlay/program");
+  await expect(output.locator('[data-scene="top"]')).toBeVisible();
+  await expect(output.locator(".candidate-row")).toHaveCount(2);
+  await expect(output.locator(".candidate-row").nth(0)).toContainText(
+    "CANDIDATO 22",
+  );
+  await expect(output.locator(".candidate-row").nth(1)).toContainText(
+    "CANDIDATO 13",
+  );
+  await expect(output.locator(".candidate-row").nth(0)).not.toContainText(
+    "FLÁVIO",
+  );
+  await expect(output.locator(".candidate-row").nth(1)).not.toContainText(
+    "LULA",
+  );
+  await expect(page.locator("tbody")).toContainText("CANDIDATO 22");
+  await expect(page.locator("tbody")).not.toContainText("FLÁVIO BOLSONARO");
+  await command(page, "/api/mock", { action: "reset" });
+});
+
 test("goldens 1080p de cinco overlays e transparência", async ({ page }) => {
   await login(page);
   await command(page, "/api/mock", { action: "reset" });

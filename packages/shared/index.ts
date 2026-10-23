@@ -115,6 +115,23 @@ export const sortCandidates = (c: CandidateResult[]) =>
       Number(a.number) - Number(b.number) ||
       a.id.localeCompare(b.id),
   );
+
+/**
+ * Nome editorial usado no video. O override de presidente evita que o TSE
+ * publique "LUIZ INÁCIO LULA DA SILVA" no lower third; ele nunca deve valer
+ * para governador, senador ou deputado, que podem usar os mesmos numeros.
+ */
+export function displayCandidateName(
+  candidate:
+    Pick<CandidateResult, "number" | "ballotName" | "name"> | null | undefined,
+  officeCode: Office,
+) {
+  const name = candidate?.ballotName || candidate?.name || "";
+  if (officeCode !== "0001") return name;
+  if (candidate?.number === "22") return "FLÁVIO BOLSONARO";
+  if (candidate?.number === "13") return "LULA";
+  return name;
+}
 export const stateSchema = z
   .object({
     scene: z
@@ -170,7 +187,12 @@ export const stateSchema = z
       .nullable()
       .default(null),
     fullscreenTab: z.enum(["map", "duel"]).default("map"),
-    focusedUf: z.string().max(2).nullable().default(null),
+    focusedUf: z
+      .string()
+      .regex(/^[A-Za-z]{2}$/)
+      .nullable()
+      .default(null)
+      .transform((v) => v?.toUpperCase() ?? null),
     revision: z.number().int().nonnegative().default(0),
     updatedAt: z.string().default(() => new Date().toISOString()),
   })
@@ -198,6 +220,9 @@ export interface Output {
   settings: Settings;
   dataMode: "mock" | "tse" | "tse-sim";
   sequence: number;
+  round?: "1" | "2";
+  uf?: string;
+  ufName?: string;
   map?: import("./brazil-map-data").BrazilMapOfficialData | null;
 }
 export const resultKey = (
@@ -265,6 +290,7 @@ export interface RunoffProjection {
 
 export function calculateRunoffProjection(
   result: ElectionResult | null,
+  round: "1" | "2" = "2",
 ): RunoffProjection {
   if (!result || !result.candidates || result.candidates.length < 2) {
     return {
@@ -322,18 +348,29 @@ export function calculateRunoffProjection(
     leader.electedFlag === "s";
   const mathGuaranteed =
     result.sectionsTotalized > 0 &&
-    (estimatedRemainingVotes === 0
-      ? leader.votes > runnerUp.votes
-      : leader.votes > runnerUp.votes + estimatedRemainingVotes);
+    (round === "2"
+      ? estimatedRemainingVotes === 0
+        ? leader.votes > runnerUp.votes
+        : leader.votes > runnerUp.votes + estimatedRemainingVotes
+      : leader.votes > (countedValid + estimatedRemainingVotes) / 2);
   const isMathematicallyElected = officialDeclared || mathGuaranteed;
 
   let votesToSealVictory = 0;
   if (!isMathematicallyElected && estimatedRemainingVotes > 0) {
-    votesToSealVictory = Math.max(
-      0,
-      Math.ceil((runnerUp.votes + estimatedRemainingVotes - leader.votes) / 2) +
-        1,
-    );
+    votesToSealVictory =
+      round === "2"
+        ? Math.max(
+            0,
+            Math.ceil(
+              (runnerUp.votes + estimatedRemainingVotes - leader.votes) / 2,
+            ) + 1,
+          )
+        : Math.max(
+            0,
+            Math.floor(
+              (countedValid + estimatedRemainingVotes) / 2 - leader.votes,
+            ) + 1,
+          );
   }
 
   let statusLabel = "EM APURAÇÃO";
@@ -396,7 +433,7 @@ export function calculateSeatsProjection(
 
   const rawQe = validVotes / totalSeats;
   const qeDec = rawQe - Math.floor(rawQe);
-  const qe = qeDec > 0.5 ? Math.ceil(rawQe) : Math.max(1, Math.floor(rawQe));
+  const qe = qeDec >= 0.5 ? Math.ceil(rawQe) : Math.max(1, Math.floor(rawQe));
 
   const partyMap = new Map<
     string,

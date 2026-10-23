@@ -12,17 +12,20 @@ import {
   formatVotes,
   normalizeName,
   offices,
+  displayCandidateName,
   type BroadcastState,
   type Output,
   type Settings,
 } from "../../../packages/shared";
-import { CandidatePhoto, displayCandidateName } from "./overlay";
+import { CandidatePhoto } from "./overlay";
 type Health = {
   server: string;
   database: string;
   tse: string;
   dataMode: string;
   round?: string;
+  uf?: string;
+  ufName?: string;
   stateElectionAvailable?: boolean;
   lastFetchAt: string | null;
   lastChangedAt: string | null;
@@ -52,7 +55,7 @@ const scenes = [
   ["top", "TOP 4"],
   ["candidate", "INDIVIDUAL"],
   ["compare", "COMPARAÇÃO"],
-  ["runoff", "2º TURNO DUELO"],
+  ["runoff", "DUELO (TOP 2)"],
   ["fullscreen", "TELA CHEIA"],
   ["projection", "PROJEÇÃO MATEMÁTICA"],
   ["stats", "ESTATÍSTICAS"],
@@ -120,7 +123,7 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
   const { output, connected } = useOutput(true);
   const [initial, setInitial] = useState<Output | null>(null);
   const current = initial ?? output;
-  const commandQueue = useRef(Promise.resolve());
+  const commandQueue = useRef<Promise<unknown>>(Promise.resolve());
   const pendingCount = useRef(0);
   const [pending, setPending] = useState(false);
   const [program, setProgram] = useState<Output | null>(null);
@@ -190,8 +193,10 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
           setError("");
           await api(path, body);
           await load();
+          return true;
         } catch (e) {
           setError(String(e));
+          return false;
         } finally {
           pendingCount.current--;
           setPending(pendingCount.current > 0);
@@ -208,7 +213,7 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
   );
   const focusUfOnAir = useCallback(
     async (uf: string | null) => {
-      await patch({ focusedUf: uf });
+      if (!(await patch({ focusedUf: uf }))) return;
       await command("/api/broadcast/take", {});
     },
     [patch, command],
@@ -230,12 +235,16 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
         e.preventDefault();
         void patch({ scene: scenes[index][0] });
       }
-      if (e.code === "Space" || e.key === "Escape") {
+      if (
+        e.code === "Space" &&
+        !(e.target as HTMLElement).closest('button,a,[role="button"]')
+      ) {
         e.preventDefault();
-        void command(
-          `/api/broadcast/${e.code === "Space" ? "take" : "clear"}`,
-          {},
-        );
+        void command("/api/broadcast/take", {});
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        void command("/api/broadcast/clear", {});
       }
     };
     addEventListener("keydown", key);
@@ -245,14 +254,20 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
     if (health?.round !== "2") return;
     const scope = current?.state.scope;
     const office = current?.state.officeCode;
-    const localElection =
-      scope === "state" && health.stateElectionAvailable !== false;
-    if (
-      scope === "municipality" ||
-      scope === "zone" ||
-      (office !== "0001" && !localElection)
-    ) {
-      void patch({ scope: "br", officeCode: "0001" });
+    if (!scope || !office) return;
+    const localElection = health.stateElectionAvailable !== false;
+    const valid =
+      office === "0001"
+        ? scope === "br" ||
+          scope === "state" ||
+          (localElection && (scope === "municipality" || scope === "zone"))
+        : office === "0003" && localElection && scope !== "br";
+    if (!valid) {
+      void patch(
+        office === "0001"
+          ? { scope: "br" }
+          : { scope: "br", officeCode: "0001" },
+      );
     }
   }, [
     health?.round,
@@ -265,22 +280,20 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
     return (
       <main className="studio-loading">Carregando estado persistido…</main>
     );
-  const { state, result } = current;
-  const mapAvailable = state.scope === "br" && state.officeCode === "0001";
+  const { state, result, dataMode } = current;
+  const localElection = health?.stateElectionAvailable !== false;
+  const mapAvailable =
+    state.scope === "br" &&
+    state.officeCode === "0001" &&
+    (dataMode !== "tse" || health?.round === "2");
   const fullscreenTab =
     mapAvailable && state.fullscreenTab !== "duel" ? "map" : "duel";
   const isRunoffContext =
-    state.scene === "runoff" ||
-    state.scene === "fullscreen" ||
-    state.officeCode === "0001" ||
-    state.scope === "br";
+    state.scene === "runoff" || state.scene === "fullscreen";
 
   const rawCandidates = result?.candidates ?? [];
   const baseCandidates = isRunoffContext
-    ? rawCandidates.filter((c) => c.number === "22" || c.number === "13")
-        .length >= 2
-      ? rawCandidates.filter((c) => c.number === "22" || c.number === "13")
-      : rawCandidates.slice(0, 2)
+    ? rawCandidates.slice(0, 2)
     : rawCandidates;
 
   const availableParties = [
@@ -466,7 +479,7 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
               <span>
                 {result
                   ? isRunoffContext
-                    ? "2 candidatos (2º Turno)"
+                    ? `Duelo • ${baseCandidates.length} candidatos`
                     : `${result.candidates.length} candidatos`
                   : "Aguardando dados oficiais"}
               </span>
@@ -506,7 +519,9 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                   >
                     Zona Eleitoral
                   </option>
-                  <option value="state">Minas Gerais (Estado)</option>
+                  <option value="state">
+                    {health?.ufName ?? health?.uf ?? "Estado"} (Estado)
+                  </option>
                   <option value="br">Brasil</option>
                 </select>
                 {health?.round === "2" &&
@@ -584,14 +599,15 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                       key={code}
                       value={code}
                       disabled={
+                        code === "0008" ||
                         (state.scope === "br" && code !== "0001") ||
                         (health?.round === "2" &&
                           code !== "0001" &&
                           !(
-                            state.scope === "state" &&
-                            health.stateElectionAvailable !== false
-                          )) ||
-                        code === "0008"
+                            code === "0003" &&
+                            localElection &&
+                            state.scope !== "br"
+                          ))
                       }
                     >
                       {name}
@@ -704,7 +720,9 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                         <div className="table-identity">
                           <CandidatePhoto candidate={c} />
                           <div>
-                            <strong>{displayCandidateName(c)}</strong>
+                            <strong>
+                              {displayCandidateName(c, state.officeCode)}
+                            </strong>
                             <small>
                               {c.number}
                               {c.viceOrAlternates?.[0] && (
@@ -763,7 +781,7 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                             COMPARAR
                           </button>
                           <button
-                            aria-label={`Favoritar ${displayCandidateName(c)}`}
+                            aria-label={`Favoritar ${displayCandidateName(c, state.officeCode)}`}
                             aria-pressed={favorites.includes(c.id)}
                             onClick={() =>
                               void command("/api/favorites", { id: c.id })
@@ -893,7 +911,9 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                       title={
                         mapAvailable
                           ? "Mapa do Brasil em tela cheia"
-                          : "Disponível apenas para Presidente • Brasil"
+                          : dataMode === "tse" && health?.round !== "2"
+                            ? "Disponível apenas no 2º turno oficial"
+                            : "Disponível apenas para Presidente • Brasil"
                       }
                       onClick={() => {
                         if (mapAvailable) void patch({ fullscreenTab: "map" });
@@ -906,15 +926,15 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                       className={`fs-mode-btn ${fullscreenTab === "duel" ? "btn-active" : ""}`}
                       onClick={() => void patch({ fullscreenTab: "duel" })}
                     >
-                      ⚔️ Duelo 22 x 13
+                      ⚔️ Duelo (Top 2)
                     </button>
                   </div>
 
                   {!mapAvailable && (
                     <p className="fs-map-locked-note">
-                      O mapa nacional está disponível somente para{" "}
-                      <b>Presidente • Brasil</b>. Para outros cargos ou
-                      abrangências, use o duelo.
+                      O mapa nacional está disponível para{" "}
+                      <b>Presidente • Brasil</b> no 2º turno oficial. No 1º
+                      turno, para outros cargos ou abrangências, use o duelo.
                     </p>
                   )}
 

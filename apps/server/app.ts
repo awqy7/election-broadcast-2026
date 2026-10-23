@@ -132,6 +132,11 @@ export async function createApp(options: AppOptions = {}) {
   );
   const hub: SseHub = new SseHub((p) => broadcast.output(p));
   broadcast.mapProvider = () => engine.mapSnapshot();
+  broadcast.contextProvider = () => ({
+    round: engine.config.round,
+    uf: engine.options.uf.toUpperCase(),
+    ufName: engine.municipality?.stateName ?? engine.options.uf.toUpperCase(),
+  });
   const freshness = new FreshnessMonitor();
   await app.register(cookie);
   await app.register(multipart, { limits: { fileSize: 2_000_000, files: 1 } });
@@ -146,8 +151,8 @@ export async function createApp(options: AppOptions = {}) {
   app.addHook("onRequest", async (req, reply) => {
     reply.header("X-Content-Type-Options", "nosniff");
     reply.header("Referrer-Policy", "same-origin");
-    reply.header("Cache-Control", "no-store");
     const url = req.url.split("?")[0];
+    reply.header("Cache-Control", "no-store");
     const preview =
       new URL(req.url, "http://local").searchParams.get("preview") === "1";
     const protectedRoute =
@@ -335,6 +340,8 @@ export async function createApp(options: AppOptions = {}) {
       },
       configValidated: engine.config.validated,
       round: engine.config.round,
+      uf: engine.options.uf.toUpperCase(),
+      ufName: engine.municipality?.stateName ?? engine.options.uf.toUpperCase(),
       stateElectionAvailable: engine.stateElectionAvailable,
       map: engine.mapStatus(),
       municipality: engine.municipality,
@@ -457,7 +464,11 @@ export async function createApp(options: AppOptions = {}) {
       decorateReply: true,
     });
     app.setNotFoundHandler((req, reply) => {
-      if (req.url.startsWith("/api/") || req.url.startsWith("/photos/"))
+      if (
+        req.url.startsWith("/api/") ||
+        req.url.startsWith("/photos/") ||
+        req.url.startsWith("/branding/")
+      )
         return reply.code(404).send({ error: "Não encontrado" });
       // O painel de controle da simulação não existe fora do modo mock.
       // Bloquear aqui evita mostrar uma tela que não pode funcionar.

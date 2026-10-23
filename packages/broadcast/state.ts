@@ -18,6 +18,8 @@ export class BroadcastStateService {
   favorites: string[];
   sequence = 0;
   mapProvider: (() => Output["map"]) | null = null;
+  contextProvider:
+    (() => { round: "1" | "2"; uf: string; ufName: string }) | null = null;
   constructor(
     private repo: SnapshotRepository,
     private mode: "tse" | "mock" | "tse-sim",
@@ -43,12 +45,13 @@ export class BroadcastStateService {
       settings: preview ? this.settings : this.programSettings,
       dataMode: this.mode,
       sequence: this.sequence,
+      ...(this.contextProvider?.() ?? {}),
       map: this.mapProvider?.() ?? null,
     };
   }
   update(patch: unknown) {
     const next = reduceState(this.preview, patch);
-    if (next.officeCode === "0008" && next.scope !== "br")
+    if (next.officeCode === "0008" && next.scope !== "state")
       throw new Error("Deputado Distrital disponível somente no DF");
     this.save("preview", next, "PREVIEW");
     return next;

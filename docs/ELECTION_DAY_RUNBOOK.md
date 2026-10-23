@@ -14,7 +14,7 @@
 - [ ] `/health`: server/database OK, `round` igual a `2` e `map.loaded` chegando a 27/27.
 - [ ] Diagnóstico: DNS/HTTPS TSE, EA11, EA12 e município resolvido (no 2º turno o EA12 estadual só existe para AC, AM, DF, ES, RN e TO).
 - [ ] Diagnóstico EA20 conferido; pré-apuração/0,00% aceita como espera, não erro.
-- [ ] Mapa com selo verde **TSE OFICIAL**; UFs sem publicação em “AGUARDANDO”.
+- [ ] No 2º turno, mapa com selo verde **TSE OFICIAL**; UFs sem publicação em “AGUARDANDO”. No 1º turno o mapa fica desativado e a tela cheia usa o duelo.
 - [ ] Fotos de Lula e Flávio em cache (`/health.photos.cached >= 2`).
 - [ ] Foto ou silhueta conferida.
 - [ ] URL da saída conferida **pelo IP do servidor**, 1920×1080, sem mexer no endereço.

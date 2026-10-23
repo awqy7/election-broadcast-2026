@@ -17,22 +17,13 @@ import {
   calculateSeatsProjection,
   BRAZIL_STATES_GEO,
   calculateBrazilMapResults,
+  displayCandidateName,
   type BroadcastState,
   type CandidateResult,
   type ElectionResult,
   type Output,
 } from "../../../packages/shared";
 import { useOutput } from "./connection";
-
-export function displayCandidateName(
-  candidate:
-    Pick<CandidateResult, "number" | "ballotName" | "name"> | null | undefined,
-) {
-  const name = candidate?.ballotName || candidate?.name || "";
-  if (candidate?.number === "22") return "FLÁVIO BOLSONARO";
-  if (candidate?.number === "13") return "LULA";
-  return name;
-}
 
 function AnimatedNumber({
   value,
@@ -124,7 +115,7 @@ function CandidateRow({
     >
       {state.showPhoto && <CandidatePhoto candidate={candidate} />}
       <div className="candidate-identity">
-        <strong>{displayCandidateName(candidate)}</strong>
+        <strong>{displayCandidateName(candidate, state.officeCode)}</strong>
         {state.showParty && (
           <small>
             {candidate.partyAcronym} <span>• {candidate.number}</span>
@@ -204,7 +195,7 @@ function CandidateScene({
     <div className="individual">
       {state.showPhoto && <CandidatePhoto candidate={c} />}
       <div className="individual-info">
-        <h2>{displayCandidateName(c)}</h2>
+        <h2>{displayCandidateName(c, state.officeCode)}</h2>
         {state.showParty && (
           <p>
             {c.partyAcronym} | {c.number}
@@ -251,7 +242,7 @@ function CompareScene({
       {candidates.map((c, i) => (
         <div key={c.id} className="compare-candidate">
           {state.showPhoto && <CandidatePhoto candidate={c} />}
-          <h2>{displayCandidateName(c)}</h2>
+          <h2>{displayCandidateName(c, state.officeCode)}</h2>
           {state.showParty && (
             <p>
               {c.partyAcronym} • {c.number}
@@ -380,9 +371,11 @@ function VictoryGlowOverlay() {
 function RunoffScene({
   result,
   state,
+  round,
 }: {
   result: ElectionResult;
   state: BroadcastState;
+  round: "1" | "2";
 }) {
   const sorted = result ? sortCandidates(result.candidates) : [];
   const c1 = state.selectedCandidateIds[0]
@@ -390,9 +383,9 @@ function RunoffScene({
     : sorted[0];
   const c2 = state.selectedCandidateIds[1]
     ? sorted.find((c) => c.id === state.selectedCandidateIds[1]) || sorted[1]
-    : sorted[1] || sorted[0];
+    : sorted[1];
 
-  const proj = calculateRunoffProjection(result);
+  const proj = calculateRunoffProjection(result, round);
   const totalBothVotes = (c1?.votes || 0) + (c2?.votes || 0) || 1;
   const p1 = c1 ? (c1.votes / totalBothVotes) * 100 : 50;
   const p2 = c2 ? (c2.votes / totalBothVotes) * 100 : 50;
@@ -400,7 +393,7 @@ function RunoffScene({
   const isC2Winner = proj.isMathematicallyElected && proj.leader?.id === c2?.id;
 
   if (!c1 || !c2) {
-    return <WaitingScene text="AGUARDANDO CANDIDATOS DO 2º TURNO" />;
+    return <WaitingScene text="AGUARDANDO CANDIDATOS" />;
   }
 
   const candClass1 =
@@ -438,7 +431,9 @@ function RunoffScene({
             >
               {c1.partyAcronym} • {c1.number}
             </span>
-            <h2 className="runoff-name">{displayCandidateName(c1)}</h2>
+            <h2 className="runoff-name">
+              {displayCandidateName(c1, state.officeCode)}
+            </h2>
             {state.showVice &&
               (c1.viceOrAlternates?.[0] || c1.substitutes?.[0]) && (
                 <small className="runoff-vice">
@@ -525,7 +520,9 @@ function RunoffScene({
             >
               {c2.partyAcronym} • {c2.number}
             </span>
-            <h2 className="runoff-name">{displayCandidateName(c2)}</h2>
+            <h2 className="runoff-name">
+              {displayCandidateName(c2, state.officeCode)}
+            </h2>
             {state.showVice &&
               (c2.viceOrAlternates?.[0] || c2.substitutes?.[0]) && (
                 <small className="runoff-vice">
@@ -574,14 +571,18 @@ function BrazilMapModule({
   dataMode: Output["dataMode"];
   map: Output["map"];
 }) {
-  const [selectedUf, setSelectedUf] = useState<string | null>(
-    state.focusedUf ?? null,
+  const [selectedUf, setSelectedUf] = useState<string | null>(() =>
+    state.focusedUf && BRAZIL_STATES_GEO[state.focusedUf]
+      ? state.focusedUf
+      : null,
   );
 
   useEffect(() => {
-    if (state.focusedUf !== undefined) {
-      setSelectedUf(state.focusedUf);
-    }
+    setSelectedUf(
+      state.focusedUf && BRAZIL_STATES_GEO[state.focusedUf]
+        ? state.focusedUf
+        : null,
+    );
   }, [state.focusedUf]);
 
   // Tecla Escape para desativar zoom
@@ -593,11 +594,15 @@ function BrazilMapModule({
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
 
-  const mapSummary = calculateBrazilMapResults(result, map);
+  const mapSummary = calculateBrazilMapResults(
+    result,
+    dataMode === "tse" ? (map ?? { states: {}, updatedAt: null }) : map,
+  );
   const candidate13 = result?.candidates.find((c) => c.number === "13");
   const candidate22 = result?.candidates.find((c) => c.number === "22");
-  const name13 = displayCandidateName(candidate13) || "LULA";
-  const name22 = displayCandidateName(candidate22) || "FLÁVIO BOLSONARO";
+  const name13 = displayCandidateName(candidate13, state.officeCode) || "LULA";
+  const name22 =
+    displayCandidateName(candidate22, state.officeCode) || "FLÁVIO BOLSONARO";
 
   const activeGeo = selectedUf ? BRAZIL_STATES_GEO[selectedUf] : null;
   const activeState = selectedUf ? mapSummary.stateResults[selectedUf] : null;
@@ -946,15 +951,18 @@ function BrazilMapModule({
 }
 
 function FullscreenScene({ output }: { output: Output }) {
-  const { state, result, settings, dataMode, map } = output;
-  const mapAvailable = state.scope === "br" && state.officeCode === "0001";
+  const { state, result, settings, dataMode, map, round = "2" } = output;
+  const mapAvailable =
+    state.scope === "br" &&
+    state.officeCode === "0001" &&
+    (dataMode !== "tse" || round === "2");
   const activeTab =
     mapAvailable && state.fullscreenTab !== "duel" ? "map" : "duel";
 
   const sorted = result ? sortCandidates(result.candidates) : [];
   const c1 = sorted[0];
-  const c2 = sorted[1] || sorted[0];
-  const proj = calculateRunoffProjection(result);
+  const c2 = sorted[1];
+  const proj = calculateRunoffProjection(result, round);
   const s = result?.stats;
   const isC1Winner = proj.isMathematicallyElected && proj.leader?.id === c1?.id;
   const isC2Winner = proj.isMathematicallyElected && proj.leader?.id === c2?.id;
@@ -964,8 +972,10 @@ function FullscreenScene({ output }: { output: Output }) {
     (state.scope === "br"
       ? "Brasil"
       : state.scope === "state"
-        ? "Minas Gerais"
-        : "Teófilo Otoni • MG");
+        ? output.ufName || output.uf || "Estado"
+        : output.ufName
+          ? `${output.ufName} • ${output.uf}`
+          : "Município");
 
   if (activeTab === "map") {
     return (
@@ -979,6 +989,8 @@ function FullscreenScene({ output }: { output: Output }) {
       </div>
     );
   }
+
+  if (!c1 || !c2) return <WaitingScene text="AGUARDANDO CANDIDATOS" />;
 
   return (
     <div className="fullscreen-arena">
@@ -995,7 +1007,7 @@ function FullscreenScene({ output }: { output: Output }) {
           </span>
           <div className="fs-title-text">
             <h1>
-              ELEIÇÕES 2026 <b>2º TURNO</b>
+              ELEIÇÕES 2026 <b>{round === "2" ? "2º TURNO" : "1º TURNO"}</b>
             </h1>
             <span>
               {scope} • {offices[state.officeCode]}
@@ -1041,7 +1053,9 @@ function FullscreenScene({ output }: { output: Output }) {
               <div className="fs-party-pill">
                 {c1.partyAcronym} • Nº {c1.number}
               </div>
-              <h2 className="fs-name">{displayCandidateName(c1)}</h2>
+              <h2 className="fs-name">
+                {displayCandidateName(c1, state.officeCode)}
+              </h2>
               {state.showVice &&
                 (c1.viceOrAlternates?.[0] || c1.substitutes?.[0]) && (
                   <div className="fs-vice-line">
@@ -1106,7 +1120,9 @@ function FullscreenScene({ output }: { output: Output }) {
               <div className="fs-party-pill">
                 {c2.partyAcronym} • Nº {c2.number}
               </div>
-              <h2 className="fs-name">{displayCandidateName(c2)}</h2>
+              <h2 className="fs-name">
+                {displayCandidateName(c2, state.officeCode)}
+              </h2>
               {state.showVice &&
                 (c2.viceOrAlternates?.[0] || c2.substitutes?.[0]) && (
                   <div className="fs-vice-line">
@@ -1202,9 +1218,11 @@ function FullscreenScene({ output }: { output: Output }) {
 function ProjectionScene({
   result,
   state,
+  round,
 }: {
   result: ElectionResult;
   state: BroadcastState;
+  round: "1" | "2";
 }) {
   const isLegislative =
     state.officeCode === "0006" ||
@@ -1214,7 +1232,7 @@ function ProjectionScene({
   if (isLegislative) {
     const seatsProj = calculateSeatsProjection(
       result,
-      state.officeCode === "0006" ? 53 : 77,
+      state.officeCode === "0006" ? 53 : state.officeCode === "0008" ? 24 : 77,
     );
     return (
       <div className="projection-scene">
@@ -1257,7 +1275,7 @@ function ProjectionScene({
                 {p.electedCandidates.length > 0 ? (
                   p.electedCandidates.map((c) => (
                     <div key={c.id} className="proj-cand-pill">
-                      <span>{displayCandidateName(c)}</span>
+                      <span>{displayCandidateName(c, state.officeCode)}</span>
                       <b>{formatVotes(c.votes)}</b>
                     </div>
                   ))
@@ -1275,7 +1293,7 @@ function ProjectionScene({
   }
 
   // Majoritário / 2º Turno
-  const proj = calculateRunoffProjection(result);
+  const proj = calculateRunoffProjection(result, round);
   const remainingSections = result.sectionsTotal - result.sectionsTotalized;
   const remainingSecPercent =
     result.sectionsTotal > 0
@@ -1300,7 +1318,10 @@ function ProjectionScene({
       )}
       <div className="proj-header-banner">
         <div className="proj-title">
-          <h2>PROJEÇÃO MATEMÁTICA ELEITORAL • 2º TURNO</h2>
+          <h2>
+            PROJEÇÃO MATEMÁTICA ELEITORAL •{" "}
+            {round === "2" ? "2º TURNO" : "1º TURNO"}
+          </h2>
           <p>Análise de reversibilidade e limiar de confirmação matemática.</p>
         </div>
         <div
@@ -1316,7 +1337,9 @@ function ProjectionScene({
         <div className="proj-card">
           <span className="proj-card-label">LÍDER DA DISPUTA</span>
           <b className="proj-card-value">
-            {proj.leader ? displayCandidateName(proj.leader) : "—"}
+            {proj.leader
+              ? displayCandidateName(proj.leader, state.officeCode)
+              : "—"}
           </b>
           <div className="proj-card-sub">
             {formatVotes(proj.leader?.votes ?? 0)} votos (
@@ -1389,10 +1412,7 @@ function Scene({ output }: { output: Output }) {
     return <FullscreenScene output={output} />;
   }
   const sorted = result ? sortCandidates(result.candidates) : [];
-  const isRunoffContext =
-    state.scene === "runoff" ||
-    state.officeCode === "0001" ||
-    state.scope === "br";
+  const isRunoffContext = state.scene === "runoff";
   const candidates = isRunoffContext
     ? sorted.slice(0, 2)
     : state.scene === "top" || state.scene === "ticker"
@@ -1405,8 +1425,10 @@ function Scene({ output }: { output: Output }) {
     (state.scope === "br"
       ? "Brasil"
       : state.scope === "state"
-        ? "Minas Gerais"
-        : "Teófilo Otoni • MG");
+        ? output.ufName || output.uf || "Estado"
+        : output.ufName
+          ? `${output.ufName} • ${output.uf}`
+          : "Município");
   return (
     <section
       className={`broadcast-module scene-${state.scene}`}
@@ -1466,9 +1488,17 @@ function Scene({ output }: { output: Output }) {
       ) : state.scene === "compare" ? (
         <CompareScene {...{ candidates, state }} />
       ) : state.scene === "runoff" ? (
-        <RunoffScene result={result} state={state} />
+        <RunoffScene
+          result={result}
+          state={state}
+          round={output.round ?? "2"}
+        />
       ) : state.scene === "projection" ? (
-        <ProjectionScene result={result} state={state} />
+        <ProjectionScene
+          result={result}
+          state={state}
+          round={output.round ?? "2"}
+        />
       ) : state.scene === "stats" ? (
         <StatsScene result={result} />
       ) : state.scene === "progress" ? (
@@ -1509,7 +1539,7 @@ function Scene({ output }: { output: Output }) {
               <span key={copy} aria-hidden={copy === 1}>
                 {candidates.map((c) => (
                   <span key={c.id}>
-                    <strong>{displayCandidateName(c)}</strong>{" "}
+                    <strong>{displayCandidateName(c, state.officeCode)}</strong>{" "}
                     {formatPercent(c.percentage)} <i>•</i>{" "}
                   </span>
                 ))}

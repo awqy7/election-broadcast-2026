@@ -27,6 +27,7 @@ import {
   calculateRunoffProjection,
   calculateSeatsProjection,
   calculateBrazilMapResults,
+  displayCandidateName,
   type BrazilMapOfficialData,
 } from "../packages/shared";
 import { SnapshotRepository } from "../packages/core/repository";
@@ -116,6 +117,9 @@ describe("Contratos oficiais e integridade", () => {
     expect(urls.ea20("0001", "br", "mg")).toContain(
       "/6257/dados/br/br-c0001-e006257-u.json",
     );
+    expect(urls.election("0001")).toBe(mockConfig.federalElectionId);
+    expect(urls.election("0003")).toBe(mockConfig.stateElectionId);
+    expect(urls.election("0008")).toBe(mockConfig.districtElectionId);
     expect(() => urls.ea20("0003", "br", "mg")).toThrow();
     expect(() => urls.ea20("0003", "municipality", "mg")).toThrow();
     expect(urls.photo("0001", "mg", "123")).toContain("/fotos/br/123.jpeg");
@@ -579,6 +583,66 @@ it("segundo turno: cálculo de projeção matemática de vitória e limiar de co
   expect(electedProj.votesToSealVictory).toBe(0);
 });
 
+it("nome editorial só é substituído para Presidente, nunca por número em outros cargos", () => {
+  expect(
+    displayCandidateName(
+      { number: "13", ballotName: "PATRUS ANANIAS", name: "Patrus" },
+      "0003",
+    ),
+  ).toBe("PATRUS ANANIAS");
+  expect(
+    displayCandidateName(
+      { number: "22", ballotName: "CANDIDATO 22", name: "Candidato" },
+      "0003",
+    ),
+  ).toBe("CANDIDATO 22");
+  expect(
+    displayCandidateName(
+      { number: "13", ballotName: "LUIZ INÁCIO LULA DA SILVA", name: "Lula" },
+      "0001",
+    ),
+  ).toBe("LULA");
+  expect(
+    displayCandidateName(
+      { number: "22", ballotName: "FLÁVIO NANTES BOLSONARO", name: "Flávio" },
+      "0001",
+    ),
+  ).toBe("FLÁVIO BOLSONARO");
+});
+
+it("1º turno só declara eleito com maioria absoluta; 2º turno mantém duelo", () => {
+  const base = normalize();
+  const candidates = base.candidates.slice(0, 3).map((c, i) => ({
+    ...c,
+    votes: [45, 30, 25][i],
+    percentage: [45, 30, 25][i],
+  }));
+  const partial = {
+    ...base,
+    sectionsTotal: 100,
+    sectionsTotalized: 100,
+    sectionsPending: 0,
+    mathematicallyDefined: null,
+    candidates,
+    stats: undefined,
+  };
+  expect(calculateRunoffProjection(partial, "1").isMathematicallyElected).toBe(
+    false,
+  );
+  expect(calculateRunoffProjection(partial, "2").isMathematicallyElected).toBe(
+    true,
+  );
+});
+
+it("quociente eleitoral arredonda fração 0,5 para cima", () => {
+  const base = normalize();
+  const result = {
+    ...base,
+    stats: { ...base.stats!, validVotes: 105 },
+  };
+  expect(calculateSeatsProjection(result, 10).electoralQuotient).toBe(11);
+});
+
 it("sistema proporcional: cálculo de quociente eleitoral, partidário e sobras (D'Hondt)", () => {
   const mock = new MockSource();
   const doc = mock.document("0006", "state");
@@ -617,6 +681,9 @@ it("BroadcastState suporta novas cenas de 2º turno, fullscreen, projeção e ef
 
   const s3 = reduceState(s, { scene: "projection" });
   expect(s3.scene).toBe("projection");
+
+  expect(stateSchema.parse({ focusedUf: "go" }).focusedUf).toBe("GO");
+  expect(stateSchema.parse({ focusedUf: null }).focusedUf).toBeNull();
 });
 
 it("projeções tratam casos extremos: dados vazios, empate e ausência de seções", () => {
@@ -715,6 +782,81 @@ describe("Mapa oficial por UF", () => {
     expect(summary.stateResults.AC.leader).toBe("tie");
     expect(summary.stateResults.AC.statusLabel).toBe("AGUARDANDO");
     expect(summary.stateResults.AC.votes22).toBe(0);
+  });
+  it("só publica mapa no 2º turno e limpa erro antigo após UF válida", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "election-map-test-"));
+    const repo = new SnapshotRepository(join(dir, "test.db"));
+    try {
+      const ea11 = JSON.parse(
+        readFileSync("docs/specs/ea11-live.json", "utf8"),
+      );
+      const config = ElectionConfigService.fromEA11(ea11, {
+        ...initialElectionConfig,
+        round: "2",
+      });
+      const raw = JSON.parse(readFileSync("docs/specs/ea20-live.json", "utf8"));
+      const mapDoc = {
+        ...raw,
+        ele: "6258",
+        t: "2",
+        f: "o",
+        tpabr: "uf",
+        cdabr: "AC",
+        carg: [
+          {
+            ...raw.carg[0],
+            cd: "1",
+            nmn: "Presidente",
+            nmm: "Presidente",
+            nmf: "Presidente",
+          },
+        ],
+      };
+      const http = new TseHttpClient(
+        repo,
+        new RateLimiter(1),
+        5000,
+        async () =>
+          new Response(JSON.stringify(mapDoc), {
+            headers: { etag: '"map-ac"' },
+          }),
+      );
+      const engine = new TseIngestionService(
+        "tse",
+        repo,
+        http,
+        {
+          host: "resultados.tse.jus.br",
+          uf: "mg",
+          municipalityName: "Teófilo Otoni",
+          interval: 10000,
+          round: "2",
+          photoDirectory: join(dir, "photos"),
+        },
+        () => [],
+        () => {},
+      );
+      engine.config = config;
+      await (
+        engine as unknown as { ingestMapState: (uf: string) => Promise<void> }
+      ).ingestMapState("AC");
+      expect(engine.mapSnapshot()?.states.AC).toBeDefined();
+      (engine as unknown as { mapErrors: Map<string, string> }).mapErrors.set(
+        "AC",
+        "erro antigo",
+      );
+      await (
+        engine as unknown as { ingestMapState: (uf: string) => Promise<void> }
+      ).ingestMapState("AC");
+      expect(engine.mapStatus().errors.AC).toBeUndefined();
+      engine.config = { ...config, round: "1" };
+      expect(engine.mapSnapshot()).toBeNull();
+      expect(engine.mapStatus().loaded).toBe(0);
+      await engine.close();
+    } finally {
+      repo.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
   it("não troca o mapa oficial por dados sintéticos quando não há UF", () => {
     const synthetic = calculateBrazilMapResults(null);

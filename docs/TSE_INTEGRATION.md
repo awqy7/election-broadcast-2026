@@ -16,7 +16,7 @@ As evidências JSON de `specs` vieram dos endpoints oficiais e servem para teste
 3. `arq[].dir` determina diretórios para `cm`, `u`, `ab`, `ft`. Tokens resolvidos só podem apontar para HTTPS no host TSE configurado.
 4. EA12 `mun-e00<estadual>-cm.json` fornece municípios. A comparação normaliza acentos, caixa e espaços. O código encontrado para Teófilo Otoni é persistido com nome, UF e IDG; não existe código de produção embutido no resolvedor. No 2º turno o EA12 estadual só publica as UFs com disputa de governo (AC, AM, DF, ES, RN e TO); se a UF padrão não estiver lá, o sistema mantém o município em cache e segue com o mapa nacional, sem inventar cidade.
 5. EA20 usa o código descoberto, cargo com quatro dígitos e eleição com seis dígitos no nome do arquivo. A pasta da eleição usa o identificador fornecido pelo EA11.
-6. O mapa oficial consulta os 27 EA20 estaduais de Presidente (`<uf>/<uf>-c0001-e006258-u.json`), um por vez a cada `TSE_MAP_POLL_INTERVAL_MS` (padrão 2000 ms). O resultado é mantido em memória separada do resultado do cargo; UFs ausentes ficam neutras, nunca com dados sintéticos. Não há detalhamento municipal de Presidente nessa fonte.
+6. No 2º turno, o mapa oficial consulta os 27 EA20 estaduais de Presidente (`<uf>/<uf>-c0001-e006258-u.json`), um por vez a cada `TSE_MAP_POLL_INTERVAL_MS` (padrão 2000 ms). O resultado é mantido em memória separada do resultado do cargo; UFs ausentes ficam neutras, nunca com dados sintéticos. No 1º turno o mapa não é consultado nem exibido. Não há detalhamento municipal de Presidente nessa fonte.
 
 ## Dados e semântica
 

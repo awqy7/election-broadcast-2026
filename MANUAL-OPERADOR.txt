@@ -77,11 +77,12 @@ os dados. Nao publique a pasta do programa na internet.
   APURACAO     percentual das secoes
   TICKER       texto rodando
 
-MAPA OFICIAL
+MAPA OFICIAL (2o TURNO)
   Abra TELA CHEIA com abrangencia BRASIL e cargo PRESIDENTE.
   O mapa carrega as 27 UFs direto do TSE, uma por vez, e mostra
   o selo verde TSE OFICIAL. Estado ainda sem publicacao fica
   cinza com AGUARDANDO; isso e espera, nao erro.
+  No 1o turno o mapa oficial fica desativado; use o duelo.
 
 2o TURNO (25/10/2026)
   Para Presidente, o mapa e os votos por estado valem para todo

@@ -1,6 +1,6 @@
-> Versão 1.1.0: mapa oficial por UF (27 arquivos EA20), fotos reais e 2º turno (`TSE_ROUND=2`). O mapa não usa mais dados sintéticos no modo oficial. Compatibilidade de overlay: Chromium 86+, sem `Array.at()`. Diagnóstico em `/overlay/check`. Veja [orientações para navegador incorporado](docs/BROWSER_COMPATIBILITY.md).
+> Versão 1.1.1: mapa oficial por UF no 2º turno (27 arquivos EA20), fotos reais e `TSE_ROUND=2`. O mapa não usa dados sintéticos no modo oficial e fica desativado no 1º turno. Compatibilidade de overlay: Chromium 86+, sem `Array.at()`. Diagnóstico em `/overlay/check`. Veja [orientações para navegador incorporado](docs/BROWSER_COMPATIBILITY.md).
 
-> Instalador Windows 1.1.0: o atalho principal inicia diretamente o **OFICIAL**. A primeira abertura configura o sistema; falhas ficam em `data/startup.log` e a janela permanece aberta. O simulado exige abertura explícita pelo atalho separado.
+> Instalador Windows 1.1.1: o atalho principal inicia diretamente o **OFICIAL**. A primeira abertura configura o sistema; falhas ficam em `data/startup.log` e a janela permanece aberta. O simulado exige abertura explícita pelo atalho separado.
 
 # Election Broadcast 2026
 
@@ -62,7 +62,7 @@ Em produção, volte para `DATA_MODE=tse`, confirme `TSE_ROUND=2` e reinicie. Os
 
 ## Mapa oficial e 2º turno
 
-No modo `tse`, o mapa do Brasil é montado com os 27 arquivos EA20 estaduais de Presidente, um por UF a cada 2 segundos. Cada estado usa votos e percentuais oficiais; UFs ainda não publicadas ficam neutras com “AGUARDANDO”. O selo verde **TSE OFICIAL** substitui a faixa de simulação. Não existe fallback para o mapa sintético no modo oficial.
+No modo `tse` com `TSE_ROUND=2`, o mapa do Brasil é montado com os 27 arquivos EA20 estaduais de Presidente, um por UF a cada 2 segundos. Cada estado usa votos e percentuais oficiais; UFs ainda não publicadas ficam neutras com “AGUARDANDO”. O selo verde **TSE OFICIAL** substitui a faixa de simulação. Não existe fallback para o mapa sintético no modo oficial. No 1º turno o mapa oficial não é carregado e a tela cheia usa o duelo.
 
 Em 25/10/2026, `TSE_ROUND=2` seleciona o pleito `3221`, eleição federal `6258` e estadual `6260`. O 2º turno presidencial cobre todos os estados no mapa. Já o detalhamento por cidade/zona e as eleições de governo só existem para as UFs com disputa estadual (AC, AM, DF, ES, RN e TO); para as demais, use **Brasil** ou **Estado** com o cargo **Presidente**. O Studio desabilita cidade/zona quando não há essa fonte.
 
