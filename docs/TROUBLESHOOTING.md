@@ -18,7 +18,7 @@
 | Aguardando liberação oficial        | EA20 informou `dv=n`; aguarde autorização na própria fonte.                                                                                                                  |
 | Sem foto                            | Silhueta preserva layout. Fotos não recebem polling.                                                                                                                         |
 | A saída não mostra nada             | Confira se a aba `/overlay/program` está aberta, se deu TAKE e se a janela preta do programa continua de pé.                                                                 |
-| Mudança do Studio não entra no ar   | O controle edita preview; clique TAKE e confira se HOLD está ativo. Comparação, Duelo (Top 2) e Tela cheia entram direto ao clicar.                                          |
+| Mudança do Studio não entra no ar   | Cenas entram direto ao clicar; para dados, posição ou escala, clique TAKE e confira se HOLD está ativo.                                                                      |
 | Diagnóstico de saída desconectada   | Abra a aba `/overlay/program`; o preview do painel não conta como conexão de saída.                                                                                          |
 | UI antiga após alteração do código  | Recompile ou use DEV_WEB=true em desenvolvimento.                                                                                                                            |
 | better-sqlite3 não carrega          | `O Driver do banco de dados` na instalação. Só Windows 64 bits; antivírus pode ter bloqueado `better_sqlite3.node`.                                                          |

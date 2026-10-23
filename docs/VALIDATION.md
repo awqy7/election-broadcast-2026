@@ -416,6 +416,21 @@ com o caminho do próprio executável. Esse servidor órfão segurava o prefixo 
 fazia toda invocação nova ficar na fila, o que parecia "instalador quebrado" e
 era "prefixo travado". Vale derrubar por PID, casando o caminho do prefixo.
 
+## Validação 1.1.3 — dashboard final (23/10/2026)
+
+- Dashboard sem o botão TOP 4. Permanecem Individual, Comparação, Duelo (Top
+  2), Tela cheia, Projeção matemática, Estatística, Apuração e Ticker.
+- Individual, Comparação, Duelo, Projeção, Estatística e Apuração usam o card
+  de largura total (0–1920 px), encostado no rodapé (y = 1080) e com a mesma
+  altura do painel. Tela cheia continua 1920×1080; Ticker mantém a faixa.
+- Todos os botões de cena entram no ar ao clicar, sem TAKE. Individual usa o
+  primeiro candidato quando não há seleção; Comparação completa os dois
+  primeiros. O controle de quantidade de candidatos do TOP foi removido.
+- Goldens de Individual e Apuração atualizados para a largura total. `format`,
+  `lint`, `typecheck`, 92 testes unitários e 12 testes e2e passando.
+- Validado no Chromium 86 real nas oito cenas: sem erros de console, sem
+  overflow e cards de lower third com bordas 0/1920 e base 1080.
+
 ## Validação 1.1.2 — correções de overlay (23/10/2026)
 
 - Removida a faixa diagonal azul (`broadcast-wipe-beam`) que aparecia no canto

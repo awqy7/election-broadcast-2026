@@ -227,7 +227,7 @@ describe("Contratos oficiais e integridade", () => {
   });
   it("BroadcastState e reducer suportam cena stats, zonas e filtros", () => {
     const s = stateSchema.parse({});
-    expect(s.scene).toBe("top");
+    expect(s.scene).toBe("progress");
     expect(s.showVice).toBe(true);
     expect(s.showStats).toBe(true);
     const statsState = reduceState(s, {
@@ -361,10 +361,10 @@ describe("Persistência, HOLD e HTTP", () => {
       () => normalize(),
       () => {},
     );
-    service.update({ scene: "progress" });
-    expect(service.program.scene).toBe("top");
-    service.take();
+    service.update({ scene: "stats" });
     expect(service.program.scene).toBe("progress");
+    service.take();
+    expect(service.program.scene).toBe("stats");
     expect(
       (
         repo.db.prepare("SELECT count(*) as n FROM broadcast_event").get() as {

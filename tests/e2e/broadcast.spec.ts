@@ -59,9 +59,8 @@ test("Studio → TAKE → SSE → cenas, HOLD, busca, CLEAR e reconexão", async
   await page.screenshot({ path: "test-results/studio-1920x1080.png" });
   const output = await context.newPage();
   await output.goto("/overlay/program");
-  await page.getByRole("button", { name: "TOP 4", exact: false }).click();
-  await page.getByRole("button", { name: "TAKE COLOCAR NO AR" }).click();
-  await expect(output.locator('[data-scene="top"]')).toBeVisible();
+  await page.getByRole("button", { name: "APURAÇÃO", exact: false }).click();
+  await expect(output.locator('[data-scene="progress"]')).toBeVisible();
   expect(
     await output
       .locator("body")
@@ -154,10 +153,7 @@ test("governador no 2º turno mantém os nomes reais do mock", async ({
   await command(page, "/api/mock", { action: "reset" });
 });
 
-test("comparação, duelo e tela cheia entram no ar ao clicar", async ({
-  page,
-  context,
-}) => {
+test("todas as cenas entram no ar ao clicar", async ({ page, context }) => {
   await login(page);
   await command(page, "/api/mock", { action: "reset" });
   await command(page, "/api/mock", { action: "online" });
@@ -168,20 +164,25 @@ test("comparação, duelo e tela cheia entram no ar ao clicar", async ({
 
   const sceneButton = (name: string) =>
     page.locator(".scene-selector").getByRole("button", { name });
-
-  await sceneButton("COMPARAÇÃO").click();
-  await expect(output.locator('[data-scene="compare"]')).toBeVisible();
-
-  await sceneButton("DUELO (TOP 2)").click();
-  await expect(output.locator('[data-scene="runoff"]')).toBeVisible();
-
-  await sceneButton("TELA CHEIA").click();
-  await expect(output.locator(".fullscreen-arena")).toBeVisible();
+  const cases: [string, string][] = [
+    ["INDIVIDUAL", '[data-scene="candidate"]'],
+    ["COMPARAÇÃO", '[data-scene="compare"]'],
+    ["DUELO (TOP 2)", '[data-scene="runoff"]'],
+    ["TELA CHEIA", ".fullscreen-arena"],
+    ["PROJEÇÃO MATEMÁTICA", '[data-scene="projection"]'],
+    ["ESTATÍSTICAS", '[data-scene="stats"]'],
+    ["APURAÇÃO", '[data-scene="progress"]'],
+    ["TICKER", '[data-scene="ticker"]'],
+  ];
+  for (const [name, selector] of cases) {
+    await sceneButton(name).click();
+    await expect(output.locator(selector)).toBeVisible();
+  }
 
   await expect(output.locator(".broadcast-wipe-beam")).toHaveCount(0);
 });
 
-test("duelo e comparação preenchem 1920 px e encostam no rodapé", async ({
+test("cenas de lower third preenchem 1920 px e encostam no rodapé", async ({
   page,
   context,
 }) => {
@@ -211,19 +212,24 @@ test("duelo e comparação preenchem 1920 px e encostam no rodapé", async ({
       .toEqual({ left: 0, right: 1920, bottom: 1080 });
   };
 
-  await command(page, "/api/preview", {
-    scene: "compare",
-    selectedCandidateIds: ids,
-    position: "bottom-center",
-  });
-  await command(page, "/api/broadcast/take", {});
-  await expect(output.locator('[data-scene="compare"]')).toBeVisible();
-  await expectFlush();
-
-  await command(page, "/api/preview", { scene: "runoff" });
-  await command(page, "/api/broadcast/take", {});
-  await expect(output.locator('[data-scene="runoff"]')).toBeVisible();
-  await expectFlush();
+  const cases: [string, string[]][] = [
+    ["candidate", [ids[0]]],
+    ["compare", ids],
+    ["runoff", []],
+    ["projection", []],
+    ["stats", []],
+    ["progress", []],
+  ];
+  for (const [scene, selectedCandidateIds] of cases) {
+    await command(page, "/api/preview", {
+      scene,
+      selectedCandidateIds,
+      position: "bottom-center",
+    });
+    await command(page, "/api/broadcast/take", {});
+    await expect(output.locator(`[data-scene="${scene}"]`)).toBeVisible();
+    await expectFlush();
+  }
 });
 
 test("goldens 1080p de cinco overlays e transparência", async ({ page }) => {
@@ -366,14 +372,6 @@ test("botões refletem a função: Individual, Comparar, favoritos e composiçã
     page.getByRole("button", { name: "Limpar seleção" }),
   ).toContainText("0/4");
   await page
-    .getByRole("combobox", { name: "Candidatos", exact: true })
-    .selectOption("6");
-  await page
-    .locator(".scene-selector")
-    .getByRole("button", { name: "TOP 6" })
-    .click();
-  await expect(preview.locator(".candidate-row")).toHaveCount(6);
-  await page
     .getByRole("combobox", { name: "Posição", exact: true })
     .selectOption("top-left");
   await page
@@ -401,7 +399,7 @@ test("botões refletem a função: Individual, Comparar, favoritos e composiçã
     .click();
   await expect(preview.locator('[data-scene="ticker"]')).toBeVisible();
   await page.keyboard.press("1");
-  await expect(preview.locator('[data-scene="top"]')).toBeVisible();
+  await expect(preview.locator('[data-scene="candidate"]')).toBeVisible();
   await page.getByRole("combobox", { name: "Abrangência" }).selectOption("br");
   await expect(
     page.getByRole("combobox", { name: "Cargo", exact: true }),

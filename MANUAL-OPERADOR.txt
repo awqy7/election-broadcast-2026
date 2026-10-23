@@ -70,10 +70,12 @@ os dados. Nao publique a pasta do programa na internet.
 4. OPERAR O PAINEL (o dia a dia)
 ----------------------------------------------------------------
 
-  TOP          mostra os mais votados
   INDIVIDUAL   um candidato
-  COMPARAR     dois, tres ou quatro candidatos
+  COMPARACAO   dois, tres ou quatro candidatos
+  DUELO        disputa direta entre os dois primeiros
   TELA CHEIA   mapa do Brasil ou duelo
+  PROJECAO     leitura matematica da disputa
+  ESTATISTICA  secoes, validos, brancos e nulos
   APURACAO     percentual das secoes
   TICKER       texto rodando
 
@@ -93,17 +95,16 @@ MAPA OFICIAL (2o TURNO)
 Como colocar no ar:
 
   1. Escolha o cargo e o lugar
-  2. Escolha a cena
+  2. Escolha a cena  ->  entra no ar direto ao clicar
   3. Veja o PREVIEW (na parte de baixo)
-  4. Clique em TAKE  ->  o grafico vai para o programa
-     (COMPARAÇÃO, DUELO TOP 2 e TELA CHEIA entram no ar
-      direto ao clicar, sem TAKE)
+  4. Mudou dados, posicao ou escala? Clique em TAKE para
+     confirmar a composicao no programa
   5. Clique em CLEAR ->  tira o grafico da tela na hora
 
   HOLD   congela os numeros que estao no ar. Desligue o HOLD
          antes do proximo TAKE.
 
-Atalhos:  1 a 9 trocam de cena | 3, 4 e 5 entram no ar direto
+Atalhos:  1 a 8 trocam de cena e entram no ar direto
            espaco faz TAKE | Esc faz CLEAR
 
 O botao "Abrir a saida", no painel, abre a aba 2 em uma nova

@@ -53,7 +53,6 @@ type Diagnostic = {
   detail: string;
 };
 const scenes = [
-  ["top", "TOP 4"],
   ["candidate", "INDIVIDUAL"],
   ["compare", "COMPARAÇÃO"],
   ["runoff", "DUELO (TOP 2)"],
@@ -63,11 +62,6 @@ const scenes = [
   ["progress", "APURAÇÃO"],
   ["ticker", "TICKER"],
 ] as const;
-const autoTakeScenes = new Set<BroadcastState["scene"]>([
-  "compare",
-  "runoff",
-  "fullscreen",
-]);
 function Login({ onLogin }: { onLogin: () => void }) {
   const [key, setKey] = useState(""),
     [error, setError] = useState("");
@@ -220,21 +214,21 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
   const selectScene = useCallback(
     async (scene: BroadcastState["scene"]) => {
       const body: Partial<BroadcastState> = { scene };
-      if (scene === "compare") {
-        const selected = current?.state.selectedCandidateIds ?? [];
-        if (selected.length < 2) {
-          const ids = [...selected];
-          for (const candidate of sortCandidates(
-            current?.result?.candidates ?? [],
-          )) {
-            if (!ids.includes(candidate.id)) ids.push(candidate.id);
-            if (ids.length === 2) break;
-          }
-          body.selectedCandidateIds = ids.slice(0, 2);
+      const selected = current?.state.selectedCandidateIds ?? [];
+      const sorted = sortCandidates(current?.result?.candidates ?? []);
+      if (scene === "candidate" && selected.length === 0) {
+        body.selectedCandidateIds = sorted.slice(0, 1).map((c) => c.id);
+      }
+      if (scene === "compare" && selected.length < 2) {
+        const ids = [...selected];
+        for (const candidate of sorted) {
+          if (!ids.includes(candidate.id)) ids.push(candidate.id);
+          if (ids.length === 2) break;
         }
+        body.selectedCandidateIds = ids.slice(0, 2);
       }
       if (!(await patch(body))) return;
-      if (autoTakeScenes.has(scene)) await command("/api/broadcast/take", {});
+      await command("/api/broadcast/take", {});
     },
     [patch, command, current],
   );
@@ -652,7 +646,7 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                   onClick={() => void selectScene(id)}
                 >
                   <kbd>{index + 1}</kbd>
-                  {id === "top" ? `TOP ${state.topCount}` : label}
+                  {label}
                 </button>
               ))}
             </div>
@@ -899,19 +893,6 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                 </select>
               </label>
               <div className="inline-fields">
-                <label>
-                  Candidatos
-                  <select
-                    value={state.topCount}
-                    onChange={(e) =>
-                      void patch({ topCount: Number(e.target.value) })
-                    }
-                  >
-                    {[2, 3, 4, 5, 6].map((n) => (
-                      <option key={n}>{n}</option>
-                    ))}
-                  </select>
-                </label>
                 <label>
                   Escala
                   <select

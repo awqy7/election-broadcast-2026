@@ -152,7 +152,7 @@ it("oficial e simulado TSE isolam banco, configuração e sessão; mutações mo
     "resultados-sim.tse.jus.br/simulado/simulado2026",
   );
   simulation.broadcast.update({ scene: "ticker" });
-  expect(official.broadcast.preview.scene).toBe("top");
+  expect(official.broadcast.preview.scene).toBe("progress");
   const officialHeaders = await login(official);
   const simHeaders = await login(simulation);
   expect(officialHeaders.cookie.split("=")[0]).not.toBe(

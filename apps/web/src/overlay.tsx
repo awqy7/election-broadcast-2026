@@ -1591,7 +1591,14 @@ export function BroadcastCanvas({
   const isFullWidthLowerThird =
     !isFullscreen &&
     display.state.position.startsWith("bottom") &&
-    (display.state.scene === "compare" || display.state.scene === "runoff");
+    [
+      "candidate",
+      "compare",
+      "runoff",
+      "projection",
+      "stats",
+      "progress",
+    ].includes(display.state.scene);
   const key = (o: Output) =>
     `${o.state.scene}:${o.state.scope}:${o.state.officeCode}:${o.state.municipalityCode ?? ""}:${o.state.zoneCode ?? ""}:${o.state.visible}:${o.state.position}`;
   useEffect(() => {

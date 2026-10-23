@@ -146,7 +146,7 @@ export const stateSchema = z
         "fullscreen",
         "projection",
       ])
-      .default("top"),
+      .default("progress"),
     scope: z
       .enum(["municipality", "state", "br", "zone"])
       .default("municipality"),
