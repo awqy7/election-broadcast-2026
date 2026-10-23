@@ -1,6 +1,6 @@
-> Versão 1.1.1: mapa oficial por UF no 2º turno (27 arquivos EA20), fotos reais e `TSE_ROUND=2`. O mapa não usa dados sintéticos no modo oficial e fica desativado no 1º turno. Compatibilidade de overlay: Chromium 86+, sem `Array.at()`. Diagnóstico em `/overlay/check`. Veja [orientações para navegador incorporado](docs/BROWSER_COMPATIBILITY.md).
+> Versão 1.1.2: mapa oficial por UF no 2º turno (27 arquivos EA20), fotos reais e `TSE_ROUND=2`. O mapa não usa dados sintéticos no modo oficial e fica desativado no 1º turno. Compatibilidade de overlay: Chromium 86+, sem `Array.at()`. Diagnóstico em `/overlay/check`. Veja [orientações para navegador incorporado](docs/BROWSER_COMPATIBILITY.md).
 
-> Instalador Windows 1.1.1: o atalho principal inicia diretamente o **OFICIAL**. A primeira abertura configura o sistema; falhas ficam em `data/startup.log` e a janela permanece aberta. O simulado exige abertura explícita pelo atalho separado.
+> Instalador Windows 1.1.2: o atalho principal inicia diretamente o **OFICIAL**. A primeira abertura configura o sistema; falhas ficam em `data/startup.log` e a janela permanece aberta. O simulado exige abertura explícita pelo atalho separado.
 
 # Election Broadcast 2026
 
@@ -73,11 +73,11 @@ As fotos oficiais continuam vindo do diretório `ft` do EA11; no 2º turno o TSE
 1. Selecione abrangência e cargo.
 2. Escolha TOP, individual, comparação, apuração ou ticker.
 3. Para individual/comparação, selecione candidatos na tabela. A busca ignora acentos e caixa.
-4. Confira o preview. Alterações de cena permanecem no preview até TAKE.
+4. Confira o preview. TOP, individual e demais cenas permanecem no preview até TAKE; Comparação, Duelo (Top 2) e Tela cheia entram no ar ao clicar.
 5. TAKE envia a composição para `/overlay/program`; CLEAR a retira imediatamente.
 6. HOLD congela os dados do programa, inclusive após reinício. Desative HOLD antes de um novo TAKE.
 
-Atalhos: `1…5` selecionam cenas, `Espaço` faz TAKE, `Esc` faz CLEAR. Atalhos são ignorados enquanto se digita em campos. Favoritos são atalhos e não alteram a ordenação do TOP. Empates são ordenados por número somente para estabilidade visual.
+Atalhos: `1…9` selecionam cenas; `3`, `4` e `5` entram no ar direto. `Espaço` faz TAKE; `Esc` faz CLEAR. Atalhos são ignorados enquanto se digita em campos. Favoritos são atalhos e não alteram a ordenação do TOP. Empates são ordenados por número somente para estabilidade visual.
 
 A URL da saída é **`http://IP-DO-SERVIDOR:8787/overlay/program`**, dimensão **1920 × 1080**. Mantenha a aba aberta. Ela é a única coisa que vai para a outra máquina. Veja [DOIS-ENDERECOS](docs/DOIS-ENDERECOS.md).
 

@@ -29,7 +29,7 @@
 
 Monitore TSE, freshness, última consulta, última alteração, último snapshot, SSE e a saída real. FRESH/DELAYED diferenciam atualização recente de fonte acessível sem alteração. STALE/OFFLINE pedem checagem da fonte/rede. A ausência de mudança não autoriza inferir encerramento.
 
-- Mudanças de cargo/abrangência são preparadas no preview e confirmadas com TAKE.
+- Mudanças de cargo/abrangência são preparadas no preview e confirmadas com TAKE. Comparação, Duelo (Top 2) e Tela cheia entram no ar ao clicar.
 - Não confunda votos locais para Presidente com resultado nacional; confirme cabeçalho.
 - No 2º turno, cidade/zona e cargos estaduais só existem para AC, AM, DF, ES, RN e TO. Para as demais UFs, use Brasil ou Estado com Presidente; o Studio bloqueia o que não tem fonte.
 - O mapa oficial atualiza uma UF por vez (~54 s por ciclo). Não reinicie o servidor para “forçar” atualização.

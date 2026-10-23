@@ -96,12 +96,15 @@ Como colocar no ar:
   2. Escolha a cena
   3. Veja o PREVIEW (na parte de baixo)
   4. Clique em TAKE  ->  o grafico vai para o programa
+     (COMPARAÇÃO, DUELO TOP 2 e TELA CHEIA entram no ar
+      direto ao clicar, sem TAKE)
   5. Clique em CLEAR ->  tira o grafico da tela na hora
 
   HOLD   congela os numeros que estao no ar. Desligue o HOLD
          antes do proximo TAKE.
 
-Atalhos:  1 a 5 trocam de cena | espaco faz TAKE | Esc faz CLEAR
+Atalhos:  1 a 9 trocam de cena | 3, 4 e 5 entram no ar direto
+           espaco faz TAKE | Esc faz CLEAR
 
 O botao "Abrir a saida", no painel, abre a aba 2 em uma nova
 aba do navegador. É so um atalho: nao muda nada.

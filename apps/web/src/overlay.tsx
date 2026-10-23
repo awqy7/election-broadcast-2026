@@ -1584,11 +1584,14 @@ export function BroadcastCanvas({
 }) {
   const [display, setDisplay] = useState(output);
   const [leaving, setLeaving] = useState(false);
-  const [wipeKey, setWipeKey] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFullscreen =
     display.state.scene === "fullscreen" ||
     display.state.position === "fullscreen";
+  const isFullWidthLowerThird =
+    !isFullscreen &&
+    display.state.position.startsWith("bottom") &&
+    (display.state.scene === "compare" || display.state.scene === "runoff");
   const key = (o: Output) =>
     `${o.state.scene}:${o.state.scope}:${o.state.officeCode}:${o.state.municipalityCode ?? ""}:${o.state.zoneCode ?? ""}:${o.state.visible}:${o.state.position}`;
   useEffect(() => {
@@ -1597,7 +1600,6 @@ export function BroadcastCanvas({
       timer.current = setTimeout(() => {
         setDisplay(output);
         setLeaving(false);
-        setWipeKey((k) => k + 1);
       }, 240);
     } else {
       setDisplay(output);
@@ -1620,7 +1622,6 @@ export function BroadcastCanvas({
       className="canvas"
       style={{ width: 1920, height: 1080, transform: `scale(${scale})` }}
     >
-      <div key={wipeKey} className="broadcast-wipe-beam" aria-hidden="true" />
       {preview && !isFullscreen && (
         <div
           className="safe-area"
@@ -1634,10 +1635,11 @@ export function BroadcastCanvas({
       )}
       {state.visible && (
         <div
-          className={`module-anchor ${state.position} ${isFullscreen ? "is-fullscreen" : ""} ${leaving ? "scene-leave" : "scene-enter"}`}
+          className={`module-anchor ${state.position} ${isFullscreen ? "is-fullscreen" : ""} ${isFullWidthLowerThird ? "is-fullwidth-lower-third" : ""} ${leaving ? "scene-leave" : "scene-enter"}`}
           style={
             {
-              "--module-scale": isFullscreen ? 1 : state.scale,
+              "--module-scale":
+                isFullscreen || isFullWidthLowerThird ? 1 : state.scale,
             } as CSSProperties
           }
         >

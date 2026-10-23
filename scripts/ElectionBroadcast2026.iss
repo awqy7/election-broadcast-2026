@@ -18,7 +18,7 @@
 ; ---------------------------------------------------------------------------
 
 #define AppName "Election Broadcast 2026"
-#define AppVersion "1.1.1"
+#define AppVersion "1.1.2"
 #define AppPublisher "Election Broadcast 2026"
 #define AppExeName "ElectionBroadcast2026"
 

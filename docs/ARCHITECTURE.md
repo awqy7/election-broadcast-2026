@@ -22,7 +22,7 @@ O processo é persistente. Um scheduler não sobreposto ingere somente combinaç
 
 Migrations numeradas são aplicadas em transação. SQLite usa WAL, synchronous FULL e busy timeout. Armazena configurações, cache HTTP, snapshots completos, auditoria das operações e logs de fetch. Snapshots são limitados aos últimos 120 por recurso; fetch_log aos últimos 20 mil registros. A exportação usa SQLite Backup API, não cópia insegura de um arquivo WAL em uso.
 
-O programa é separado do preview e dos dados eleitorais. TAKE copia a composição validada para o programa. HOLD persiste uma cópia dos dados exibidos; CLEAR altera apenas a visibilidade. Alterações de dados não fazem TAKE automaticamente de uma cena nova. Resultados do mesmo cargo/abrangência seguem atualizando o programa enquanto HOLD estiver desativado.
+O programa é separado do preview e dos dados eleitorais. TAKE copia a composição validada para o programa. HOLD persiste uma cópia dos dados exibidos; CLEAR altera apenas a visibilidade. Alterações de dados não fazem TAKE automaticamente de uma cena nova; Comparação, Duelo (Top 2) e Tela cheia são exceções de cena e entram no ar ao clicar. Resultados do mesmo cargo/abrangência seguem atualizando o programa enquanto HOLD estiver desativado.
 
 Um novo EA20 só é publicado depois de validar todo o documento, contexto, candidatos e seções, normalizar e confirmar a gravação SQLite. Hash igual não cria nova revisão eleitoral. Timestamp claramente anterior para o mesmo recurso é rejeitado. IDG é conservado para proveniência, não tratado como contador entre arquivos.
 

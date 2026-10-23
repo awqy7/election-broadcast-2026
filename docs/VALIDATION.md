@@ -415,3 +415,18 @@ O `wineserver` fica preso se um processo launched continuar vivo, e o
 com o caminho do próprio executável. Esse servidor órfão segurava o prefixo e
 fazia toda invocação nova ficar na fila, o que parecia "instalador quebrado" e
 era "prefixo travado". Vale derrubar por PID, casando o caminho do prefixo.
+
+## Validação 1.1.2 — correções de overlay (23/10/2026)
+
+- Removida a faixa diagonal azul (`broadcast-wipe-beam`) que aparecia no canto
+  superior esquerdo a cada troca de cena. Os goldens antigos registravam a
+  faixa congelada; os novos não a contêm.
+- Comparação e Duelo (Top 2) passam a ocupar 1920 px de largura, encostar no
+  rodapé (y = 1080) e manter a mesma altura do painel. A escala é forçada para
+  1 nessas duas cenas para não sobrar margem lateral.
+- Comparação, Duelo (Top 2) e Tela cheia entram no ar ao clicar no seletor de
+  cenas, sem TAKE. Se a comparação estiver sem seleção, usa os dois primeiros
+  candidatos; com um selecionado, completa com o próximo.
+- Verificado no Chromium 86 real: largura 1920, bordas 0/1920, base 1080,
+  zero `broadcast-wipe-beam`, sem erros de console e sem overflow.
+- `format`, `lint`, `typecheck`, 92 testes unitários e 12 testes e2e passando.

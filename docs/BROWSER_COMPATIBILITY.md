@@ -1,4 +1,4 @@
-# Overlay em navegador incorporado — versão 1.1.1
+# Overlay em navegador incorporado — versão 1.1.2
 
 ## Falha identificada
 
@@ -29,7 +29,7 @@ motor o cliente selecionou nem elimina possíveis problemas de rede/GPU.
    nem `?preview=1` no computador de transmissão, pois o preview exige login.
 4. Se estiver em outro computador, use o IP do servidor. `localhost` aponta
    para o próprio computador do vMix, não para outro PC.
-5. No Studio, confira **OFICIAL**, selecione a cena e pressione **TAKE**.
+5. No Studio, confira **OFICIAL**, selecione a cena e pressione **TAKE**. Comparação, Duelo (Top 2) e Tela cheia são exceções: entram no ar ao clicar.
    Após CLEAR o canvas fica transparente por projeto.
 6. Depois de atualizar o programa, recarregue ou recrie o Web Browser Input
    para que carregue o JavaScript novo. Atualizar o Chrome do Windows não

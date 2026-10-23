@@ -154,6 +154,78 @@ test("governador no 2º turno mantém os nomes reais do mock", async ({
   await command(page, "/api/mock", { action: "reset" });
 });
 
+test("comparação, duelo e tela cheia entram no ar ao clicar", async ({
+  page,
+  context,
+}) => {
+  await login(page);
+  await command(page, "/api/mock", { action: "reset" });
+  await command(page, "/api/mock", { action: "online" });
+  await command(page, "/api/mock", { action: "progress:100" });
+  await command(page, "/api/broadcast/clear", {});
+  const output = await context.newPage();
+  await output.goto("/overlay/program");
+
+  const sceneButton = (name: string) =>
+    page.locator(".scene-selector").getByRole("button", { name });
+
+  await sceneButton("COMPARAÇÃO").click();
+  await expect(output.locator('[data-scene="compare"]')).toBeVisible();
+
+  await sceneButton("DUELO (TOP 2)").click();
+  await expect(output.locator('[data-scene="runoff"]')).toBeVisible();
+
+  await sceneButton("TELA CHEIA").click();
+  await expect(output.locator(".fullscreen-arena")).toBeVisible();
+
+  await expect(output.locator(".broadcast-wipe-beam")).toHaveCount(0);
+});
+
+test("duelo e comparação preenchem 1920 px e encostam no rodapé", async ({
+  page,
+  context,
+}) => {
+  await login(page);
+  await command(page, "/api/mock", { action: "reset" });
+  await command(page, "/api/mock", { action: "online" });
+  await command(page, "/api/mock", { action: "progress:100" });
+  const data = await (await page.request.get("/api/studio")).json();
+  const ids = data.preview.result.candidates
+    .slice(0, 2)
+    .map((candidate: { id: string }) => candidate.id);
+  const output = await context.newPage();
+  await output.goto("/overlay/program");
+
+  const expectFlush = async () => {
+    await expect
+      .poll(() =>
+        output.locator(".module-anchor").evaluate((el) => {
+          const box = el.getBoundingClientRect();
+          return {
+            left: Math.round(box.left),
+            right: Math.round(box.right),
+            bottom: Math.round(box.bottom),
+          };
+        }),
+      )
+      .toEqual({ left: 0, right: 1920, bottom: 1080 });
+  };
+
+  await command(page, "/api/preview", {
+    scene: "compare",
+    selectedCandidateIds: ids,
+    position: "bottom-center",
+  });
+  await command(page, "/api/broadcast/take", {});
+  await expect(output.locator('[data-scene="compare"]')).toBeVisible();
+  await expectFlush();
+
+  await command(page, "/api/preview", { scene: "runoff" });
+  await command(page, "/api/broadcast/take", {});
+  await expect(output.locator('[data-scene="runoff"]')).toBeVisible();
+  await expectFlush();
+});
+
 test("goldens 1080p de cinco overlays e transparência", async ({ page }) => {
   await login(page);
   await command(page, "/api/mock", { action: "reset" });

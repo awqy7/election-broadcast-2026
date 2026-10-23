@@ -37,7 +37,7 @@ Anote em papel. O arquivo também está lá se precisar de novo.
 
 ## Passo 3: iniciar o oficial
 
-Use o atalho **Election Broadcast 2026** ou `INICIAR.bat`. Na versão 1.1.1,
+Use o atalho **Election Broadcast 2026** ou `INICIAR.bat`. Na versão 1.1.2,
 a configuração inicial acontece automaticamente e o servidor inicia em
 **OFICIAL**, sem menu e sem abrir o simulado. O Studio só abre depois que
 `/health` confirmar o ambiente oficial. Se já estiver ativo, a instância é

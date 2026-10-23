@@ -13,6 +13,7 @@ import {
   normalizeName,
   offices,
   displayCandidateName,
+  sortCandidates,
   type BroadcastState,
   type Output,
   type Settings,
@@ -62,6 +63,11 @@ const scenes = [
   ["progress", "APURAÇÃO"],
   ["ticker", "TICKER"],
 ] as const;
+const autoTakeScenes = new Set<BroadcastState["scene"]>([
+  "compare",
+  "runoff",
+  "fullscreen",
+]);
 function Login({ onLogin }: { onLogin: () => void }) {
   const [key, setKey] = useState(""),
     [error, setError] = useState("");
@@ -211,6 +217,27 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
     (body: Partial<BroadcastState>) => command("/api/preview", body),
     [command],
   );
+  const selectScene = useCallback(
+    async (scene: BroadcastState["scene"]) => {
+      const body: Partial<BroadcastState> = { scene };
+      if (scene === "compare") {
+        const selected = current?.state.selectedCandidateIds ?? [];
+        if (selected.length < 2) {
+          const ids = [...selected];
+          for (const candidate of sortCandidates(
+            current?.result?.candidates ?? [],
+          )) {
+            if (!ids.includes(candidate.id)) ids.push(candidate.id);
+            if (ids.length === 2) break;
+          }
+          body.selectedCandidateIds = ids.slice(0, 2);
+        }
+      }
+      if (!(await patch(body))) return;
+      if (autoTakeScenes.has(scene)) await command("/api/broadcast/take", {});
+    },
+    [patch, command, current],
+  );
   const focusUfOnAir = useCallback(
     async (uf: string | null) => {
       if (!(await patch({ focusedUf: uf }))) return;
@@ -233,7 +260,7 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
       const index = Number(e.key) - 1;
       if (index >= 0 && index < scenes.length) {
         e.preventDefault();
-        void patch({ scene: scenes[index][0] });
+        void selectScene(scenes[index][0]);
       }
       if (
         e.code === "Space" &&
@@ -249,7 +276,7 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
     };
     addEventListener("keydown", key);
     return () => removeEventListener("keydown", key);
-  }, [patch, command]);
+  }, [selectScene, command]);
   useEffect(() => {
     if (health?.round !== "2") return;
     const scope = current?.state.scope;
@@ -622,7 +649,7 @@ function StudioShell({ onLogout }: { onLogout: () => void }) {
                   key={id}
                   aria-pressed={state.scene === id}
                   className={state.scene === id ? "selected" : ""}
-                  onClick={() => void patch({ scene: id })}
+                  onClick={() => void selectScene(id)}
                 >
                   <kbd>{index + 1}</kbd>
                   {id === "top" ? `TOP ${state.topCount}` : label}
